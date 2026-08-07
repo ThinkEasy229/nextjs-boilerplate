@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
 import {
@@ -15,8 +16,9 @@ import {
 
 export const runtime = 'nodejs';
 
-const STORAGE_DIRECTORY = '/tmp/wrap-designer';
-const STORAGE_FILE = path.join(STORAGE_DIRECTORY, 'sessions.json');
+const STORAGE_DIRECTORY = path.join(os.tmpdir(), 'wrap-designer');
+const SESSIONS_DIRECTORY = path.join(STORAGE_DIRECTORY, 'sessions');
+const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface StoredWrapSession {
   sessionId: string;
@@ -25,8 +27,8 @@ interface StoredWrapSession {
   data: WrapDesignSessionData;
 }
 
-function getCorsHeaders() {
-  const origin = process.env.FRAMER_ORIGIN || '*';
+function getCorsHeaders(request?: NextRequest) {
+  const origin = process.env.FRAMER_ORIGIN || request?.headers.get('origin') || request?.nextUrl.origin || 'http://localhost:3000';
 
   return {
     'Access-Control-Allow-Origin': origin,
@@ -36,13 +38,16 @@ function getCorsHeaders() {
 }
 
 export async function GET(request: NextRequest) {
-  const headers = getCorsHeaders();
+  const headers = getCorsHeaders(request);
   const sessionId = request.nextUrl.searchParams.get('sessionId');
 
   try {
     if (sessionId) {
-      const sessions = await readSessions();
-      const stored = sessions[sessionId];
+      if (!SESSION_ID_PATTERN.test(sessionId)) {
+        return NextResponse.json({ error: 'Invalid design session id' }, { status: 400, headers });
+      }
+
+      const stored = await readSession(sessionId);
 
       if (!stored) {
         return NextResponse.json({ error: 'Design session not found' }, { status: 404, headers });
@@ -84,7 +89,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const headers = getCorsHeaders();
+  const headers = getCorsHeaders(request);
 
   try {
     const body = (await request.json()) as WrapDesignRequest;
@@ -109,8 +114,8 @@ export async function POST(request: NextRequest) {
       try {
         data = await generateAiConcepts(body, configuredSalesEmail);
         source = 'ai';
-      } catch {
-        data = createFallbackConcepts(body, configuredSalesEmail);
+      } catch (error) {
+        console.error('AI wrap concept generation failed, serving fallback concepts instead.', error);
       }
     }
 
@@ -149,10 +154,10 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function OPTIONS() {
+export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, {
     status: 204,
-    headers: getCorsHeaders(),
+    headers: getCorsHeaders(request),
   });
 }
 
@@ -177,7 +182,6 @@ async function generateAiConcepts(
         role: 'user',
         content: JSON.stringify({
           companyName: request.companyName,
-          contactEmail: request.contactEmail,
           industry: request.industry,
           vehicleType: request.vehicleType,
           preferredColors: request.preferredColors,
@@ -236,24 +240,22 @@ async function generateAiConcepts(
   };
 }
 
-async function readSessions() {
-  try {
-    const file = await readFile(STORAGE_FILE, 'utf8');
-    return JSON.parse(file) as Record<string, StoredWrapSession>;
-  } catch {
-    return {};
-  }
-}
-
 async function saveSession(session: StoredWrapSession) {
   try {
-    const sessions = await readSessions();
-    sessions[session.sessionId] = session;
-    await mkdir(STORAGE_DIRECTORY, { recursive: true });
-    await writeFile(STORAGE_FILE, JSON.stringify(sessions, null, 2), 'utf8');
+    await mkdir(SESSIONS_DIRECTORY, { recursive: true });
+    await writeFile(getSessionFilePath(session.sessionId), JSON.stringify(session, null, 2), 'utf8');
     return true;
   } catch {
     return false;
+  }
+}
+
+async function readSession(sessionId: string) {
+  try {
+    const file = await readFile(getSessionFilePath(sessionId), 'utf8');
+    return JSON.parse(file) as StoredWrapSession;
+  } catch {
+    return null;
   }
 }
 
@@ -284,4 +286,8 @@ function normalizePalette(value: unknown, fallback: string[]) {
     .slice(0, 3);
 
   return palette.length === 3 ? palette : fallback;
+}
+
+function getSessionFilePath(sessionId: string) {
+  return path.join(SESSIONS_DIRECTORY, `${sessionId}.json`);
 }

@@ -142,12 +142,14 @@ export const PREMIUM_PACKAGE: PremiumPackage = {
 
 export function getSalesContact(configuredEmail?: string): SalesContact {
   const salesEmail = configuredEmail || 'sales@example.com';
+  const salesPhone = process.env.NEXT_PUBLIC_SALES_PHONE || '(555) 010-2026';
+  const salesPhoneHref = `tel:${salesPhone.replaceAll(/[^+\d]/g, '') || '+15550102026'}`;
 
   return {
     salesEmail,
     salesMailto: `mailto:${salesEmail}?subject=Vehicle%20Wrap%20Design%20Consultation`,
-    salesPhone: '(555) 010-2026',
-    salesPhoneHref: 'tel:+15550102026',
+    salesPhone,
+    salesPhoneHref,
   };
 }
 
@@ -249,8 +251,8 @@ export function createVehicleMockup(
   compact = false
 ) {
   const vehicle = getVehicleOption(vehicleType);
-  const width = compact ? 360 : 760;
-  const height = compact ? 180 : 320;
+  const width = compact ? 380 : 760;
+  const height = compact ? 160 : 320;
   const viewBox = '0 0 760 320';
   const [primary, secondary, accent] = palette;
   const safeCompany = escapeXml(companyName.toUpperCase().slice(0, 24));

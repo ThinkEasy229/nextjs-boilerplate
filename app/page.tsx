@@ -13,13 +13,13 @@ import {
 
 const initialForm: WrapDesignRequest = {
   vehicleType: VEHICLE_LIBRARY[0].id,
-  companyName: 'Wrap Lab Pro',
-  contactEmail: 'design@wraplabpro.com',
-  industry: 'Commercial fleet branding',
-  preferredColors: 'Navy, electric blue, orange',
-  designDirection: 'Bold, premium, easy-to-read branding with a modern motion feel',
-  tagline: 'Turn traffic into trust',
-  goals: 'Generate a premium concept that feels ready to purchase immediately.',
+  companyName: '',
+  contactEmail: '',
+  industry: '',
+  preferredColors: '',
+  designDirection: '',
+  tagline: '',
+  goals: '',
 };
 
 export default function Home() {
@@ -30,9 +30,23 @@ export default function Home() {
   const [result, setResult] = useState<Awaited<ReturnType<typeof generateWrapConcept>> | null>(null);
 
   const salesContact = getSalesContact(process.env.NEXT_PUBLIC_SALES_EMAIL);
+  const previewRequest = useMemo<WrapDesignRequest>(
+    () => ({
+      vehicleType: form.vehicleType,
+      companyName: form.companyName || 'Your Company',
+      contactEmail: form.contactEmail || 'brand@example.com',
+      industry: form.industry || 'Commercial services',
+      preferredColors: form.preferredColors || 'Navy, electric blue, orange',
+      designDirection:
+        form.designDirection || 'Bold, premium, easy-to-read branding with a modern motion feel',
+      tagline: form.tagline || 'Turn traffic into trust',
+      goals: form.goals || 'Generate a premium concept that feels ready to purchase immediately.',
+    }),
+    [form]
+  );
   const previewSession = useMemo(
-    () => createFallbackConcepts(form, salesContact.salesEmail),
-    [form, salesContact.salesEmail]
+    () => createFallbackConcepts(previewRequest, salesContact.salesEmail),
+    [previewRequest, salesContact.salesEmail]
   );
   const activeSession = result?.data ?? previewSession;
   const selectedConcept = activeSession.concepts[selectedConceptIndex] ?? activeSession.concepts[0];
@@ -131,32 +145,38 @@ export default function Home() {
                 <Field
                   label="Company name"
                   value={form.companyName}
+                  placeholder="Wrap Lab Pro"
                   onChange={(value) => setForm((current) => ({ ...current, companyName: value }))}
                 />
                 <Field
                   label="Contact email"
                   type="email"
                   value={form.contactEmail}
+                  placeholder="design@yourcompany.com"
                   onChange={(value) => setForm((current) => ({ ...current, contactEmail: value }))}
                 />
                 <Field
                   label="Industry"
                   value={form.industry}
+                  placeholder="Commercial fleet branding"
                   onChange={(value) => setForm((current) => ({ ...current, industry: value }))}
                 />
                 <Field
                   label="Preferred colors"
                   value={form.preferredColors}
+                  placeholder="Navy, electric blue, orange"
                   onChange={(value) => setForm((current) => ({ ...current, preferredColors: value }))}
                 />
                 <Field
                   label="Tagline"
                   value={form.tagline || ''}
+                  placeholder="Turn traffic into trust"
                   onChange={(value) => setForm((current) => ({ ...current, tagline: value }))}
                 />
                 <Field
                   label="Campaign goal"
                   value={form.goals || ''}
+                  placeholder="Generate a premium concept that feels ready to purchase immediately."
                   onChange={(value) => setForm((current) => ({ ...current, goals: value }))}
                 />
               </div>
@@ -164,6 +184,7 @@ export default function Home() {
               <TextArea
                 label="2. Describe the wrap direction"
                 value={form.designDirection}
+                placeholder="Bold, premium, easy-to-read branding with a modern motion feel."
                 onChange={(value) => setForm((current) => ({ ...current, designDirection: value }))}
               />
 
@@ -311,11 +332,13 @@ function Field({
   value,
   onChange,
   type = 'text',
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: HTMLInputTypeAttribute;
+  placeholder?: string;
 }) {
   return (
     <label className="grid gap-2">
@@ -324,6 +347,7 @@ function Field({
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
         className="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
       />
     </label>
@@ -334,10 +358,12 @@ function TextArea({
   label,
   value,
   onChange,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  placeholder?: string;
 }) {
   return (
     <label className="grid gap-2">
@@ -346,6 +372,7 @@ function TextArea({
         rows={5}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
         className="rounded-[1.5rem] border border-white/10 bg-slate-900/70 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
       />
     </label>

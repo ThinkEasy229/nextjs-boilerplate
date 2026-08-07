@@ -29,6 +29,7 @@ Optional:
 
 - `FRAMER_ORIGIN` for CORS when embedding from Framer
 - `NEXT_PUBLIC_SALES_EMAIL` / `SALES_EMAIL` for the contact-sales CTA
+- `NEXT_PUBLIC_SALES_PHONE` for the displayed sales phone number
 
 ## API
 

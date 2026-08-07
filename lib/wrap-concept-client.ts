@@ -35,13 +35,8 @@ export interface WrapConceptError {
 export async function fetchWrapDesignerBootstrap(
   apiUrl: string = process.env.NEXT_PUBLIC_API_URL || ''
 ): Promise<WrapConceptBootstrapResponse> {
-  const endpoint = `${apiUrl}/api/wrap-concept`;
-  const response = await fetch(endpoint, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
+  const endpoint = resolveWrapConceptEndpoint(apiUrl);
+  const response = await fetch(endpoint, { method: 'GET' });
 
   const data = (await response.json()) as WrapConceptBootstrapResponse | WrapConceptError;
 
@@ -57,7 +52,7 @@ export async function generateWrapConcept(
   params: WrapConceptParams,
   apiUrl: string = process.env.NEXT_PUBLIC_API_URL || ''
 ): Promise<WrapConceptResponse> {
-  const endpoint = `${apiUrl}/api/wrap-concept`;
+  const endpoint = resolveWrapConceptEndpoint(apiUrl);
 
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -78,3 +73,15 @@ export async function generateWrapConcept(
 }
 
 export { validateWrapDesignRequest as validateWrapConceptParams };
+
+function resolveWrapConceptEndpoint(apiUrl: string) {
+  if (apiUrl) {
+    return new URL('/api/wrap-concept', apiUrl).toString();
+  }
+
+  if (typeof window !== 'undefined') {
+    return '/api/wrap-concept';
+  }
+
+  throw new Error('API URL not configured');
+}
