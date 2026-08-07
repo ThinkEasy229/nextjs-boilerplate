@@ -26,6 +26,8 @@ export default function VehicleWrapDesigner({ apiUrl = DEFAULT_API_URL, title = 
   const [designDirection, setDesignDirection] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
+  const [industry, setIndustry] = useState('');
+  const [preferredColors, setPreferredColors] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
@@ -35,6 +37,8 @@ export default function VehicleWrapDesigner({ apiUrl = DEFAULT_API_URL, title = 
     setDesignDirection('');
     setCompanyName('');
     setContactEmail('');
+    setIndustry('');
+    setPreferredColors('');
   };
 
   const handleSubmit = async (event) => {
@@ -54,6 +58,8 @@ export default function VehicleWrapDesigner({ apiUrl = DEFAULT_API_URL, title = 
           designDirection,
           companyName,
           contactEmail,
+          industry,
+          preferredColors,
         }),
       });
 
@@ -64,7 +70,15 @@ export default function VehicleWrapDesigner({ apiUrl = DEFAULT_API_URL, title = 
         return;
       }
 
-      const concept = payload.imageUrl ? payload : payload.data ?? payload;
+      const concept = payload?.data?.concepts?.[0]
+        ? {
+            imageUrl: payload.data.concepts[0].mockupImage,
+            conceptTitle: payload.data.concepts[0].title,
+            creativeRationale: payload.data.concepts[0].rationale,
+          }
+        : payload.imageUrl
+          ? payload
+          : payload.data ?? payload;
       setResult({
         imageUrl: concept.imageUrl,
         conceptTitle: concept.conceptTitle,
@@ -88,12 +102,37 @@ export default function VehicleWrapDesigner({ apiUrl = DEFAULT_API_URL, title = 
           <label style={fieldLabelStyle}>Vehicle Type</label>
           <select value={vehicleType} onChange={(event) => setVehicleType(event.target.value)} required style={inputStyle}>
             <option value="">Select a vehicle...</option>
-            <option value="van">Van</option>
-            <option value="truck">Truck</option>
-            <option value="car">Car</option>
-            <option value="trailer">Trailer</option>
-            <option value="bus">Bus</option>
+            <option value="cargo-van">Cargo Van</option>
+            <option value="box-truck">Box Truck</option>
+            <option value="sedan">Sedan</option>
+            <option value="city-bus">City Bus</option>
+            <option value="semi-truck">Semi Truck</option>
+            <option value="pickup">Pickup Truck</option>
           </select>
+        </div>
+
+        <div>
+          <label style={fieldLabelStyle}>Industry</label>
+          <input
+            type="text"
+            value={industry}
+            onChange={(event) => setIndustry(event.target.value)}
+            placeholder="Commercial fleet branding"
+            required
+            style={inputStyle}
+          />
+        </div>
+
+        <div>
+          <label style={fieldLabelStyle}>Preferred Colors</label>
+          <input
+            type="text"
+            value={preferredColors}
+            onChange={(event) => setPreferredColors(event.target.value)}
+            placeholder="Navy, electric blue, orange"
+            required
+            style={inputStyle}
+          />
         </div>
 
         <div>

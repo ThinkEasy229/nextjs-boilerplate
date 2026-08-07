@@ -1,316 +1,294 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import {
+  createFallbackConcepts,
+  createVehicleMockup,
+  getSalesContact,
+  PREMIUM_PACKAGE,
+  validateWrapDesignRequest,
+  VEHICLE_LIBRARY,
+  type WrapDesignRequest,
+  type WrapDesignSessionData,
+} from '@/lib/wrap-designer';
 
 export const runtime = 'nodejs';
 
-type WrapConceptRequest = {
-  vehicleType: string;
-  designDirection: string;
-  companyName: string;
-  contactEmail: string;
-};
+const STORAGE_DIRECTORY = path.join(os.tmpdir(), 'wrap-designer');
+const SESSIONS_DIRECTORY = path.join(STORAGE_DIRECTORY, 'sessions');
+const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type ConceptData = {
-  conceptTitle: string;
-  creativeRationale: string;
-};
-
-const REQUIRED_FIELDS: Array<keyof WrapConceptRequest> = [
-  'vehicleType',
-  'designDirection',
-  'companyName',
-  'contactEmail',
-];
-
-function getAllowedOrigins(): string[] {
-  return (process.env.FRAMER_ORIGIN ?? '')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+interface StoredWrapSession {
+  sessionId: string;
+  generatedAt: string;
+  source: 'ai' | 'fallback';
+  data: WrapDesignSessionData;
 }
 
-function getCorsHeaders(request: NextRequest): HeadersInit {
-  const configuredOrigins = getAllowedOrigins();
-
-  const requestOrigin = request.headers.get('origin') ?? '';
-  const allowOrigin = configuredOrigins.length === 0
-    ? '*'
-    : requestOrigin && configuredOrigins.includes(requestOrigin)
-      ? requestOrigin
-      : '';
+function getCorsHeaders(request?: NextRequest) {
+  const origin = process.env.FRAMER_ORIGIN || request?.headers.get('origin') || request?.nextUrl.origin || 'http://localhost:3000';
 
   return {
+    'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    Vary: 'Origin',
-    ...(allowOrigin ? { 'Access-Control-Allow-Origin': allowOrigin } : {}),
+    'Access-Control-Allow-Headers': 'Content-Type',
   };
-}
-
-function isOriginAllowed(request: NextRequest): boolean {
-  const configuredOrigins = getAllowedOrigins();
-
-  if (configuredOrigins.length === 0) {
-    return true;
-  }
-
-  const requestOrigin = request.headers.get('origin');
-
-  return Boolean(requestOrigin && configuredOrigins.includes(requestOrigin));
-}
-
-function getRejectedCorsHeaders(request: NextRequest): HeadersInit {
-  const requestOrigin = request.headers.get('origin') ?? '';
-
-  return {
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    Vary: 'Origin',
-    ...(requestOrigin ? { 'Access-Control-Allow-Origin': requestOrigin } : {}),
-  };
-}
-
-function badRequest(message: string, headers: HeadersInit) {
-  return NextResponse.json({ success: false, error: message }, { status: 400, headers });
-}
-
-function isValidEmail(value: string): boolean {
-  if (!value || value.length > 254 || value.includes(' ')) {
-    return false;
-  }
-
-  const atIndex = value.indexOf('@');
-  if (atIndex <= 0 || atIndex !== value.lastIndexOf('@') || atIndex === value.length - 1) {
-    return false;
-  }
-
-  const localPart = value.slice(0, atIndex);
-  const domainPart = value.slice(atIndex + 1);
-
-  if (!localPart || !domainPart || domainPart.startsWith('.') || domainPart.endsWith('.')) {
-    return false;
-  }
-
-  return domainPart.includes('.');
-}
-
-function parseConcept(rawContent: string | null | undefined, fallbackCompanyName: string, fallbackVehicleType: string): ConceptData {
-  const fallback: ConceptData = {
-    conceptTitle: `${fallbackCompanyName} ${fallbackVehicleType} Wrap Concept`,
-    creativeRationale: `A professional ${fallbackVehicleType} wrap concept for ${fallbackCompanyName} based on the provided design direction.`,
-  };
-
-  if (!rawContent) {
-    return fallback;
-  }
-
-  const trimmed = rawContent.trim();
-
-  try {
-    const parsed = JSON.parse(trimmed) as Partial<ConceptData>;
-    if (parsed.conceptTitle && parsed.creativeRationale) {
-      return {
-        conceptTitle: parsed.conceptTitle,
-        creativeRationale: parsed.creativeRationale,
-      };
-    }
-
-    return fallback;
-  } catch {
-    const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[0]) as Partial<ConceptData>;
-        if (parsed.conceptTitle && parsed.creativeRationale) {
-          return {
-            conceptTitle: parsed.conceptTitle,
-            creativeRationale: parsed.creativeRationale,
-          };
-        }
-      } catch {
-        return fallback;
-      }
-    }
-  }
-
-  return fallback;
 }
 
 export async function GET(request: NextRequest) {
-  if (!isOriginAllowed(request)) {
+  const headers = getCorsHeaders(request);
+  const sessionId = request.nextUrl.searchParams.get('sessionId');
+
+  try {
+    if (sessionId) {
+      if (!SESSION_ID_PATTERN.test(sessionId)) {
+        return NextResponse.json({ error: 'Invalid design session id' }, { status: 400, headers });
+      }
+
+      const stored = await readSession(sessionId);
+
+      if (!stored) {
+        return NextResponse.json({ error: 'Design session not found' }, { status: 404, headers });
+      }
+
+      return NextResponse.json(
+        {
+          success: true,
+          data: stored.data,
+          metadata: {
+            generatedAt: stored.generatedAt,
+            source: stored.source,
+            stored: true,
+          },
+        },
+        { headers }
+      );
+    }
+
     return NextResponse.json(
-      { success: false, error: 'Origin not allowed' },
-      { status: 403, headers: getRejectedCorsHeaders(request) }
+      {
+        success: true,
+        data: {
+          availableVehicles: VEHICLE_LIBRARY,
+          premiumPackage: PREMIUM_PACKAGE,
+          contact: getSalesContact(process.env.SALES_EMAIL || process.env.NEXT_PUBLIC_SALES_EMAIL),
+        },
+      },
+      { headers }
+    );
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : 'Failed to load wrap designer metadata',
+      },
+      { status: 500, headers }
     );
   }
+}
 
+export async function POST(request: NextRequest) {
   const headers = getCorsHeaders(request);
 
-  return NextResponse.json(
-    {
-      status: 'ok',
-      message: 'Wrap Concept Generator API is live',
-      endpoint: '/api/wrap-concept',
-      timestamp: new Date().toISOString(),
-    },
-    { headers }
-  );
+  try {
+    const body = (await request.json()) as WrapDesignRequest;
+
+    if (!validateWrapDesignRequest(body)) {
+      return NextResponse.json(
+        {
+          error:
+            'Missing required fields: vehicleType, companyName, contactEmail, industry, preferredColors, designDirection',
+        },
+        { status: 400, headers }
+      );
+    }
+
+    const configuredSalesEmail = process.env.SALES_EMAIL || process.env.NEXT_PUBLIC_SALES_EMAIL;
+    const generatedAt = new Date().toISOString();
+
+    let data = createFallbackConcepts(body, configuredSalesEmail);
+    let source: 'ai' | 'fallback' = 'fallback';
+
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        data = await generateAiConcepts(body, configuredSalesEmail);
+        source = 'ai';
+      } catch (error) {
+        console.error('AI wrap concept generation failed, serving fallback concepts instead.', error);
+      }
+    }
+
+    const sessionId = randomUUID();
+    const storedSession: StoredWrapSession = {
+      sessionId,
+      generatedAt,
+      source,
+      data: {
+        ...data,
+        sessionId,
+      },
+    };
+
+    const stored = await saveSession(storedSession);
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: storedSession.data,
+        metadata: {
+          generatedAt,
+          source,
+          stored,
+        },
+      },
+      { headers }
+    );
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : 'Failed to generate wrap concepts',
+      },
+      { status: 500, headers }
+    );
+  }
 }
 
 export async function OPTIONS(request: NextRequest) {
-  if (!isOriginAllowed(request)) {
-    return new NextResponse(null, {
-      status: 403,
-      headers: getRejectedCorsHeaders(request),
-    });
-  }
-
   return new NextResponse(null, {
     status: 204,
     headers: getCorsHeaders(request),
   });
 }
 
-export async function POST(request: NextRequest) {
-  if (!isOriginAllowed(request)) {
-    return NextResponse.json(
-      { success: false, error: 'Origin not allowed' },
-      { status: 403, headers: getRejectedCorsHeaders(request) }
-    );
-  }
+async function generateAiConcepts(
+  request: WrapDesignRequest,
+  configuredSalesEmail?: string
+): Promise<WrapDesignSessionData> {
+  const OpenAI = (await import('openai')).default;
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const fallback = createFallbackConcepts(request, configuredSalesEmail);
 
-  const headers = getCorsHeaders(request);
-
-  let body: Partial<WrapConceptRequest>;
-  try {
-    body = (await request.json()) as Partial<WrapConceptRequest>;
-  } catch {
-    return badRequest('Invalid JSON body', headers);
-  }
-
-  const normalizedBody = {
-    vehicleType: body.vehicleType?.trim() ?? '',
-    designDirection: body.designDirection?.trim() ?? '',
-    companyName: body.companyName?.trim() ?? '',
-    contactEmail: body.contactEmail?.trim() ?? '',
-  };
-
-  const missingField = REQUIRED_FIELDS.find((field) => normalizedBody[field].length === 0);
-  if (missingField) {
-    return badRequest(`Missing required field: ${missingField}`, headers);
-  }
-
-  if (!isValidEmail(normalizedBody.contactEmail)) {
-    return badRequest('Invalid contactEmail format', headers);
-  }
-
-  if (normalizedBody.companyName.length > 100) {
-    return badRequest('companyName must be 100 characters or fewer', headers);
-  }
-
-  if (normalizedBody.designDirection.length > 200) {
-    return badRequest('designDirection must be 200 characters or fewer', headers);
-  }
-
-  if (normalizedBody.vehicleType.length > 40) {
-    return badRequest('vehicleType must be 40 characters or fewer', headers);
-  }
-
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { success: false, error: 'OpenAI API key is not configured' },
-      { status: 500, headers }
-    );
-  }
-
-  try {
-    const client = new OpenAI({ apiKey });
-
-    const imagePrompt = [
-      `Create a professional, photorealistic vehicle wrap design for a ${normalizedBody.vehicleType}.`,
-      `Company name: ${normalizedBody.companyName}.`,
-      `Design direction: ${normalizedBody.designDirection}.`,
-      'Prioritize brand visibility, legibility, and clean commercial styling.',
-      'Show a complete, polished wrap concept mockup.',
-    ].join(' ');
-
-    const imageResponse = await client.images.generate({
-      model: 'dall-e-3',
-      prompt: imagePrompt,
-      n: 1,
-      size: '1024x1024',
-      quality: 'standard',
-    });
-
-    const imageUrl = imageResponse.data?.find((item) => typeof item.url === 'string')?.url;
-
-    if (!imageUrl) {
-      return NextResponse.json(
-        { success: false, error: 'Failed to generate wrap image' },
-        { status: 502, headers }
-      );
-    }
-
-    const conceptResponse = await client.chat.completions.create({
-      model: 'gpt-4o',
-      temperature: 0.7,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are a senior vehicle-wrap creative director. Respond with valid JSON only. No markdown.',
-        },
-        {
-          role: 'user',
-          content: [
-            'Create concise concept copy for this vehicle wrap request:',
-            `- Vehicle type: ${normalizedBody.vehicleType}`,
-            `- Company name: ${normalizedBody.companyName}`,
-            `- Design direction: ${normalizedBody.designDirection}`,
-            'Return exactly this JSON shape:',
-            '{"conceptTitle":"...","creativeRationale":"..."}',
-          ].join('\n'),
-        },
-      ],
-      max_tokens: 250,
-    });
-
-    const concept = parseConcept(
-      conceptResponse.choices[0]?.message?.content,
-      normalizedBody.companyName,
-      normalizedBody.vehicleType
-    );
-
-    return NextResponse.json(
+  const response = await client.chat.completions.create({
+    model: 'gpt-4o-mini',
+    response_format: { type: 'json_object' },
+    messages: [
       {
-        success: true,
-        imageUrl,
-        conceptTitle: concept.conceptTitle,
-        creativeRationale: concept.creativeRationale,
-        metadata: {
-          vehicleType: normalizedBody.vehicleType,
-          companyName: normalizedBody.companyName,
-          generatedAt: new Date().toISOString(),
-        },
+        role: 'system',
+        content:
+          'You create premium vehicle wrap design concepts. Return valid JSON with a "concepts" array of exactly 3 items. Each concept must include title, headline, rationale, graphics (array of 3 short strings), layout, premiumFeature, and palette (array of exactly 3 hex colors).',
       },
-      { status: 200, headers }
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const status = message.toLowerCase().includes('rate limit') ? 429 : 500;
+      {
+        role: 'user',
+        content: JSON.stringify({
+          companyName: request.companyName,
+          industry: request.industry,
+          vehicleType: request.vehicleType,
+          preferredColors: request.preferredColors,
+          designDirection: request.designDirection,
+          tagline: request.tagline || '',
+          goals: request.goals || '',
+        }),
+      },
+    ],
+    max_tokens: 1200,
+  });
 
-    if (status === 429) {
-      return NextResponse.json(
-        { success: false, error: 'OpenAI rate limit reached. Please retry shortly.' },
-        { status, headers }
-      );
-    }
+  const content = response.choices[0]?.message.content;
 
-    console.error('Wrap concept generation failed', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to generate wrap concept' },
-      { status, headers }
-    );
+  if (!content) {
+    return fallback;
   }
+
+  let parsed: { concepts?: Array<Record<string, unknown>> } = {};
+
+  try {
+    parsed = JSON.parse(content) as { concepts?: Array<Record<string, unknown>> };
+  } catch {
+    return fallback;
+  }
+
+  const concepts = (parsed.concepts || []).slice(0, 3).map((concept, index) => {
+    const fallbackConcept = fallback.concepts[index] || fallback.concepts[0];
+    const palette = normalizePalette(concept.palette, fallbackConcept.palette);
+    const title = asString(concept.title, fallbackConcept.title);
+    const headline = asString(concept.headline, fallbackConcept.headline);
+
+    return {
+      ...fallbackConcept,
+      title,
+      headline,
+      rationale: asString(concept.rationale, fallbackConcept.rationale),
+      graphics: normalizeStringArray(concept.graphics, fallbackConcept.graphics, 3),
+      layout: asString(concept.layout, fallbackConcept.layout),
+      premiumFeature: asString(concept.premiumFeature, fallbackConcept.premiumFeature),
+      palette,
+      mockupImage: createVehicleMockup(fallback.selectedVehicle.id, palette, request.companyName, headline),
+      mockupThumbnail: createVehicleMockup(fallback.selectedVehicle.id, palette, request.companyName, title, true),
+    };
+  });
+
+  return {
+    ...fallback,
+    concepts,
+    gallery: concepts.map((concept) => ({
+      id: concept.id,
+      title: concept.title,
+      description: concept.headline,
+      image: concept.mockupThumbnail,
+    })),
+  };
+}
+
+async function saveSession(session: StoredWrapSession) {
+  try {
+    await mkdir(SESSIONS_DIRECTORY, { recursive: true });
+    await writeFile(getSessionFilePath(session.sessionId), JSON.stringify(session, null, 2), 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readSession(sessionId: string) {
+  try {
+    const file = await readFile(getSessionFilePath(sessionId), 'utf8');
+    return JSON.parse(file) as StoredWrapSession;
+  } catch {
+    return null;
+  }
+}
+
+function asString(value: unknown, fallback: string) {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function normalizeStringArray(value: unknown, fallback: string[], limit: number) {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  const normalized = value
+    .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+    .map((entry) => entry.trim())
+    .slice(0, limit);
+
+  return normalized.length === limit ? normalized : fallback;
+}
+
+function normalizePalette(value: unknown, fallback: string[]) {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  const palette = value
+    .filter((entry): entry is string => typeof entry === 'string' && /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(entry))
+    .slice(0, 3);
+
+  return palette.length === 3 ? palette : fallback;
+}
+
+function getSessionFilePath(sessionId: string) {
+  const fileId = createHash('sha256').update(sessionId).digest('hex');
+  return path.join(SESSIONS_DIRECTORY, `${fileId}.json`);
 }
