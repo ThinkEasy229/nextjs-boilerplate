@@ -26,7 +26,7 @@ const validateInput = (data: unknown): WrapConceptRequest => {
   }
 
   const payload = data as Record<string, unknown>;
-  
+
   const vehicleType = payload.vehicleType;
   const designDirection = payload.designDirection;
   const companyName = payload.companyName;
@@ -82,6 +82,25 @@ const isValidEmail = (email: string): boolean => {
   return emailRegex.test(email) && email.length <= 254;
 };
 
+// Extract JSON from text response (handles markdown code blocks)
+const extractJSON = (text: string): Record<string, unknown> => {
+  try {
+    // Try direct JSON parsing first
+    return JSON.parse(text);
+  } catch {
+    // Try to extract JSON from markdown code blocks
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (jsonMatch && jsonMatch[1]) {
+      try {
+        return JSON.parse(jsonMatch[1]);
+      } catch {
+        throw new Error('Invalid JSON in response');
+      }
+    }
+    throw new Error('No valid JSON found in response');
+  }
+};
+
 // Generate wrap concept using OpenAI
 const generateWrapConcept = async (
   apiKey: string,
@@ -89,7 +108,7 @@ const generateWrapConcept = async (
 ): Promise<{
   imageUrl: string;
   conceptTitle: string;
-  creativRationale: string;
+  creativeRationale: string;
 }> => {
   const client = new OpenAI({ apiKey });
 
@@ -103,27 +122,28 @@ Design direction: ${request.designDirection}${revisionContext}
 
 The design should be visually striking, brand-appropriate, and ready for production. Photorealistic rendering of the vehicle with the wrap applied.`;
 
-  // Generate image using DALL-E 3
-  const imageResponse = await client.images.generate({
-    model: 'dall-e-3',
-    prompt: imagePrompt,
-    n: 1,
-    size: '1024x1024',
-    quality: 'standard',
-  });
+  try {
+    // Generate image using DALL-E 3
+    const imageResponse = await client.images.generate({
+      model: 'dall-e-3',
+      prompt: imagePrompt,
+      n: 1,
+      size: '1024x1024',
+      quality: 'standard',
+    });
 
-  const imageUrl = imageResponse.data[0].url;
-  if (!imageUrl) {
-    throw new Error('Failed to generate image from OpenAI');
-  }
+    const imageUrl = imageResponse.data[0]?.url;
+    if (!imageUrl) {
+      throw new Error('Failed to generate image from OpenAI');
+    }
 
-  // Generate concept title and rationale using GPT-4
-  const textResponse = await client.chat.completions.create({
-    model: 'gpt-4',
-    messages: [
-      {
-        role: 'user',
-        content: `Given this vehicle wrap request:
+    // Generate concept title and rationale using GPT-4
+    const textResponse = await client.chat.completions.create({
+      model: 'gpt-4-turbo',
+      messages: [
+        {
+          role: 'user',
+          content: `Given this vehicle wrap request:
 - Vehicle: ${request.vehicleType}
 - Company: ${request.companyName}
 - Design Direction: ${request.designDirection}
@@ -133,34 +153,41 @@ Please provide:
 1. A concise concept title (max 10 words)
 2. A brief creative rationale (max 100 words)
 
-Format your response as JSON with keys: "conceptTitle" and "creativRationale"`,
-      },
-    ],
-    max_tokens: 300,
-  });
+Format your response as valid JSON with keys: "conceptTitle" and "creativeRationale"`,
+        },
+      ],
+      max_tokens: 300,
+      temperature: 0.7,
+    });
 
-  const textContent = textResponse.choices[0].message.content;
-  if (!textContent) {
-    throw new Error('Failed to generate concept text from OpenAI');
-  }
+    const textContent = textResponse.choices[0]?.message.content;
+    if (!textContent) {
+      throw new Error('Failed to generate concept text from OpenAI');
+    }
 
-  // Parse JSON response
-  let conceptData;
-  try {
-    conceptData = JSON.parse(textContent);
-  } catch {
-    // Fallback if JSON parsing fails
-    conceptData = {
-      conceptTitle: `${request.companyName} ${request.vehicleType} Wrap`,
-      creativRationale: 'Custom vehicle wrap design concept based on your specifications.',
+    // Parse JSON response with better error handling
+    let conceptData: Record<string, unknown>;
+    try {
+      conceptData = extractJSON(textContent);
+    } catch {
+      // Fallback if JSON parsing fails
+      conceptData = {
+        conceptTitle: `${request.companyName} ${request.vehicleType} Wrap`,
+        creativeRationale: 'Custom vehicle wrap design concept based on your specifications.',
+      };
+    }
+
+    return {
+      imageUrl,
+      conceptTitle: String(conceptData.conceptTitle || `${request.companyName} Wrap Design`),
+      creativeRationale: String(conceptData.creativeRationale || 'Professional vehicle wrap design concept.'),
     };
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Unknown error during wrap concept generation');
   }
-
-  return {
-    imageUrl,
-    conceptTitle: conceptData.conceptTitle || `${request.companyName} Wrap Design`,
-    creativRationale: conceptData.creativRationale || 'Professional vehicle wrap design concept.',
-  };
 };
 
 // Main API route handler
@@ -171,11 +198,6 @@ export async function POST(request: NextRequest) {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
-
-  // Handle preflight requests
-  if (request.method === 'OPTIONS') {
-    return new NextResponse(null, { headers: corsHeaders });
-  }
 
   try {
     // Validate environment
@@ -204,7 +226,7 @@ export async function POST(request: NextRequest) {
         data: {
           imageUrl: concept.imageUrl,
           conceptTitle: concept.conceptTitle,
-          creativRationale: concept.creativRationale,
+          creativeRationale: concept.creativeRationale,
         },
         metadata: {
           vehicleType: validatedInput.vehicleType,
@@ -227,6 +249,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { error: 'Rate limit exceeded. Please wait before trying again.' },
           { status: 429, headers: corsHeaders }
+        );
+      }
+      if (error.message.includes('401') || error.message.includes('authentication')) {
+        return NextResponse.json(
+          { error: 'Invalid OpenAI API key. Please check your configuration.' },
+          { status: 401, headers: corsHeaders }
         );
       }
       if (error.message.includes('OpenAI')) {
@@ -260,5 +288,5 @@ export async function OPTIONS(request: NextRequest) {
     'Access-Control-Allow-Headers': 'Content-Type',
   };
 
-  return new NextResponse(null, { headers: corsHeaders });
+  return new NextResponse(null, { headers: corsHeaders, status: 204 });
 }
