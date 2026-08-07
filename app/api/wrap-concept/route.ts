@@ -45,40 +45,43 @@ async function parseInput(request: Request): Promise<WrapConceptInput> {
 }
 
 export async function POST(request: Request) {
+  let input: WrapConceptInput;
+
   try {
-    const { vehicleType, designDirection, companyName, contactEmail } =
-      await parseInput(request);
-
-    if (!vehicleType || !designDirection || !companyName || !contactEmail) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400, headers: CORS_HEADERS }
-      );
-    }
-
-    return NextResponse.json(
-      {
-        success: true,
-        data: {
-          imageUrl: '',
-          conceptTitle: `${companyName} ${vehicleType} Wrap Concept`,
-          creativeRationale: `Placeholder concept for ${companyName} based on a ${designDirection} direction for a ${vehicleType}.`,
-        },
-        metadata: {
-          vehicleType,
-          companyName,
-          generatedAt: new Date().toISOString(),
-          mock: true,
-        },
-      },
-      { status: 200, headers: CORS_HEADERS }
-    );
+    input = await parseInput(request);
   } catch {
     return NextResponse.json(
       { error: 'Invalid request body' },
       { status: 400, headers: CORS_HEADERS }
     );
   }
+
+  const { vehicleType, designDirection, companyName, contactEmail } = input;
+
+  if (!vehicleType || !designDirection || !companyName || !contactEmail) {
+    return NextResponse.json(
+      { error: 'Missing required fields' },
+      { status: 400, headers: CORS_HEADERS }
+    );
+  }
+
+  return NextResponse.json(
+    {
+      success: true,
+      data: {
+        imageUrl: '',
+        conceptTitle: `${companyName} ${vehicleType} Wrap Concept`,
+        creativeRationale: `Placeholder concept for ${companyName} based on a ${designDirection} direction for a ${vehicleType}.`,
+      },
+      metadata: {
+        vehicleType,
+        companyName,
+        generatedAt: new Date().toISOString(),
+        mock: true,
+      },
+    },
+    { status: 200, headers: CORS_HEADERS }
+  );
 }
 
 export async function OPTIONS() {
