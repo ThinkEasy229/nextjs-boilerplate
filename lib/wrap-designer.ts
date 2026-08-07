@@ -170,7 +170,7 @@ export function validateWrapDesignRequest(payload: unknown): payload is WrapDesi
     typeof record.companyName === 'string' &&
     record.companyName.trim().length > 1 &&
     typeof record.contactEmail === 'string' &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.contactEmail) &&
+    isLikelyEmail(record.contactEmail) &&
     typeof record.industry === 'string' &&
     record.industry.trim().length > 0 &&
     typeof record.preferredColors === 'string' &&
@@ -414,4 +414,15 @@ function getVehicleMarkup(vehicleType: string, primary: string, secondary: strin
         <path d="M154 130L344 130L288 214L98 214Z" fill="${accent}" opacity="0.22" />
       `;
   }
+}
+
+function isLikelyEmail(value: string) {
+  if (value.length < 5 || value.includes(' ')) {
+    return false;
+  }
+
+  const atIndex = value.indexOf('@');
+  const dotIndex = value.lastIndexOf('.');
+
+  return atIndex > 0 && dotIndex > atIndex + 1 && dotIndex < value.length - 1;
 }

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -289,5 +289,6 @@ function normalizePalette(value: unknown, fallback: string[]) {
 }
 
 function getSessionFilePath(sessionId: string) {
-  return path.join(SESSIONS_DIRECTORY, `${sessionId}.json`);
+  const fileId = createHash('sha256').update(sessionId).digest('hex');
+  return path.join(SESSIONS_DIRECTORY, `${fileId}.json`);
 }
