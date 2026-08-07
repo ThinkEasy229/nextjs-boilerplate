@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 const JOKE_API_BASE_URL = 'https://v2.jokeapi.dev/joke';
 const REQUEST_TIMEOUT_MS = 5000;
 
+// Intentionally scoped to categories exposed by the `type` query param.
 type JokeCategory = 'Any' | 'Programming';
 type ResponseFormat = 'structured' | 'single';
 
@@ -141,8 +142,8 @@ export async function GET(request: NextRequest) {
     const data =
       format === 'single'
         ? {
-            type: joke.type,
-            joke: joke.type === 'single' ? joke.joke : `${joke.setup} ${joke.delivery}`,
+            type: 'single',
+            joke: joke.type === 'single' ? joke.joke : `${joke.setup}\n${joke.delivery}`,
           }
         : joke.type === 'single'
           ? {
