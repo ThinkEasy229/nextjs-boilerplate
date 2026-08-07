@@ -25,14 +25,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { vehicleType, designDirection, companyName, contactEmail } = body;
 
-    // Validate input
     if (!vehicleType || !designDirection || !companyName || !contactEmail) {
       return NextResponse.json({
         error: 'Missing required fields: vehicleType, designDirection, companyName, contactEmail'
       }, { status: 400, headers });
     }
 
-    // Check for API key
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({
@@ -40,7 +38,6 @@ export async function POST(request: NextRequest) {
       }, { status: 500, headers });
     }
 
-    // Dynamically import OpenAI
     let OpenAI;
     try {
       OpenAI = (await import('openai')).default;
@@ -52,7 +49,6 @@ export async function POST(request: NextRequest) {
 
     const client = new OpenAI({ apiKey });
 
-    // Generate image
     const imageResponse = await client.images.generate({
       model: 'dall-e-3',
       prompt: `Professional vehicle wrap design for a ${vehicleType} for ${companyName}. Style: ${designDirection}. Photorealistic.`,
@@ -63,7 +59,6 @@ export async function POST(request: NextRequest) {
 
     const imageUrl = imageResponse.data[0]?.url;
 
-    // Generate text
     const textResponse = await client.chat.completions.create({
       model: 'gpt-4-turbo',
       messages: [{
