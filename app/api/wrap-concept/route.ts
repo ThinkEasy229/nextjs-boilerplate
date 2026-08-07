@@ -22,29 +22,76 @@ const REQUIRED_FIELDS: Array<keyof WrapConceptRequest> = [
   'contactEmail',
 ];
 
-function getCorsHeaders(request: NextRequest): HeadersInit {
-  const configuredOrigins = (process.env.FRAMER_ORIGIN ?? '')
+function getAllowedOrigins(): string[] {
+  return (process.env.FRAMER_ORIGIN ?? '')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+}
+
+function getCorsHeaders(request: NextRequest): HeadersInit {
+  const configuredOrigins = getAllowedOrigins();
 
   const requestOrigin = request.headers.get('origin') ?? '';
   const allowOrigin = configuredOrigins.length === 0
     ? '*'
-    : configuredOrigins.includes(requestOrigin)
+    : requestOrigin && configuredOrigins.includes(requestOrigin)
       ? requestOrigin
-      : configuredOrigins[0];
+      : '';
 
   return {
-    'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     Vary: 'Origin',
+    ...(allowOrigin ? { 'Access-Control-Allow-Origin': allowOrigin } : {}),
+  };
+}
+
+function isOriginAllowed(request: NextRequest): boolean {
+  const configuredOrigins = getAllowedOrigins();
+
+  if (configuredOrigins.length === 0) {
+    return true;
+  }
+
+  const requestOrigin = request.headers.get('origin');
+
+  return Boolean(requestOrigin && configuredOrigins.includes(requestOrigin));
+}
+
+function getRejectedCorsHeaders(request: NextRequest): HeadersInit {
+  const requestOrigin = request.headers.get('origin') ?? '';
+
+  return {
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    Vary: 'Origin',
+    ...(requestOrigin ? { 'Access-Control-Allow-Origin': requestOrigin } : {}),
   };
 }
 
 function badRequest(message: string, headers: HeadersInit) {
   return NextResponse.json({ success: false, error: message }, { status: 400, headers });
+}
+
+function isValidEmail(value: string): boolean {
+  if (!value || value.length > 254 || value.includes(' ')) {
+    return false;
+  }
+
+  const atIndex = value.indexOf('@');
+  if (atIndex <= 0 || atIndex !== value.lastIndexOf('@') || atIndex === value.length - 1) {
+    return false;
+  }
+
+  const localPart = value.slice(0, atIndex);
+  const domainPart = value.slice(atIndex + 1);
+
+  if (!localPart || !domainPart || domainPart.startsWith('.') || domainPart.endsWith('.')) {
+    return false;
+  }
+
+  return domainPart.includes('.');
 }
 
 function parseConcept(rawContent: string | null | undefined, fallbackCompanyName: string, fallbackVehicleType: string): ConceptData {
@@ -67,6 +114,8 @@ function parseConcept(rawContent: string | null | undefined, fallbackCompanyName
         creativeRationale: parsed.creativeRationale,
       };
     }
+
+    return fallback;
   } catch {
     const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
@@ -88,6 +137,13 @@ function parseConcept(rawContent: string | null | undefined, fallbackCompanyName
 }
 
 export async function GET(request: NextRequest) {
+  if (!isOriginAllowed(request)) {
+    return NextResponse.json(
+      { success: false, error: 'Origin not allowed' },
+      { status: 403, headers: getRejectedCorsHeaders(request) }
+    );
+  }
+
   const headers = getCorsHeaders(request);
 
   return NextResponse.json(
@@ -102,6 +158,13 @@ export async function GET(request: NextRequest) {
 }
 
 export async function OPTIONS(request: NextRequest) {
+  if (!isOriginAllowed(request)) {
+    return new NextResponse(null, {
+      status: 403,
+      headers: getRejectedCorsHeaders(request),
+    });
+  }
+
   return new NextResponse(null, {
     status: 204,
     headers: getCorsHeaders(request),
@@ -109,6 +172,13 @@ export async function OPTIONS(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  if (!isOriginAllowed(request)) {
+    return NextResponse.json(
+      { success: false, error: 'Origin not allowed' },
+      { status: 403, headers: getRejectedCorsHeaders(request) }
+    );
+  }
+
   const headers = getCorsHeaders(request);
 
   let body: Partial<WrapConceptRequest>;
@@ -130,9 +200,20 @@ export async function POST(request: NextRequest) {
     return badRequest(`Missing required field: ${missingField}`, headers);
   }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(normalizedBody.contactEmail)) {
+  if (!isValidEmail(normalizedBody.contactEmail)) {
     return badRequest('Invalid contactEmail format', headers);
+  }
+
+  if (normalizedBody.companyName.length > 100) {
+    return badRequest('companyName must be 100 characters or fewer', headers);
+  }
+
+  if (normalizedBody.designDirection.length > 200) {
+    return badRequest('designDirection must be 200 characters or fewer', headers);
+  }
+
+  if (normalizedBody.vehicleType.length > 40) {
+    return badRequest('vehicleType must be 40 characters or fewer', headers);
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -207,24 +288,29 @@ export async function POST(request: NextRequest) {
         imageUrl,
         conceptTitle: concept.conceptTitle,
         creativeRationale: concept.creativeRationale,
-        data: {
-          imageUrl,
-          conceptTitle: concept.conceptTitle,
-          creativeRationale: concept.creativeRationale,
-        },
         metadata: {
           vehicleType: normalizedBody.vehicleType,
           companyName: normalizedBody.companyName,
-          contactEmail: normalizedBody.contactEmail,
           generatedAt: new Date().toISOString(),
         },
       },
       { status: 200, headers }
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to generate wrap concept';
+    const message = error instanceof Error ? error.message : String(error);
     const status = message.toLowerCase().includes('rate limit') ? 429 : 500;
 
-    return NextResponse.json({ success: false, error: message }, { status, headers });
+    if (status === 429) {
+      return NextResponse.json(
+        { success: false, error: 'OpenAI rate limit reached. Please retry shortly.' },
+        { status, headers }
+      );
+    }
+
+    console.error('Wrap concept generation failed', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to generate wrap concept' },
+      { status, headers }
+    );
   }
 }

@@ -64,7 +64,7 @@ export default function VehicleWrapDesigner({ apiUrl = DEFAULT_API_URL, title = 
         return;
       }
 
-      const concept = payload.data ?? payload;
+      const concept = payload.imageUrl ? payload : payload.data ?? payload;
       setResult({
         imageUrl: concept.imageUrl,
         conceptTitle: concept.conceptTitle,
