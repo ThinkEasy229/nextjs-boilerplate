@@ -57,13 +57,19 @@ export async function POST(request: NextRequest) {
       quality: 'standard',
     });
 
-    const imageUrl = imageResponse.data[0]?.url;
+    const imageUrl = imageResponse.data && imageResponse.data.length > 0 ? imageResponse.data[0].url : '';
+
+    if (!imageUrl) {
+      return NextResponse.json({
+        error: 'Failed to generate image from OpenAI'
+      }, { status: 500, headers });
+    }
 
     const textResponse = await client.chat.completions.create({
       model: 'gpt-4-turbo',
       messages: [{
         role: 'user',
-        content: `Create a title and rationale for a ${vehicleType} wrap for ${companyName} with this direction: ${designDirection}. Format as JSON: {"conceptTitle":"...","creativeRationale":"..."}`
+        content: `Create a title and rationale for a ${vehicleType} wrap for ${companyName} with this direction: ${designDirection}. Format as JSON: {"conceptTitle":"...","creativeRationale":"..."}`,
       }],
       max_tokens: 300,
     });
