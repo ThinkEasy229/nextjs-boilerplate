@@ -1,103 +1,89 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
-const OpenAI = require('openai').default;
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
 
-export async function POST(request: NextRequest) {
+type WrapConceptInput = {
+  vehicleType: string;
+  designDirection: string;
+  companyName: string;
+  contactEmail: string;
+};
+
+function toTrimmedString(value: FormDataEntryValue | unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+async function parseInput(request: Request): Promise<WrapConceptInput> {
+  const contentType = request.headers.get('content-type') ?? '';
+
+  if (
+    contentType.includes('multipart/form-data') ||
+    contentType.includes('application/x-www-form-urlencoded')
+  ) {
+    const formData = await request.formData();
+
+    return {
+      vehicleType: toTrimmedString(formData.get('vehicleType')),
+      designDirection: toTrimmedString(formData.get('designDirection')),
+      companyName: toTrimmedString(formData.get('companyName')),
+      contactEmail: toTrimmedString(formData.get('contactEmail')),
+    };
+  }
+
+  const body = (await request.json()) as Partial<WrapConceptInput>;
+
+  return {
+    vehicleType: toTrimmedString(body.vehicleType),
+    designDirection: toTrimmedString(body.designDirection),
+    companyName: toTrimmedString(body.companyName),
+    contactEmail: toTrimmedString(body.contactEmail),
+  };
+}
+
+export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { vehicleType, designDirection, companyName, contactEmail } = body;
+    const { vehicleType, designDirection, companyName, contactEmail } =
+      await parseInput(request);
 
-    // Validate input
     if (!vehicleType || !designDirection || !companyName || !contactEmail) {
       return NextResponse.json(
         { error: 'Missing required fields' },
-        { status: 400 }
+        { status: 400, headers: CORS_HEADERS }
       );
-    }
-
-    // Get API key
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'OpenAI API key not configured' },
-        { status: 500 }
-      );
-    }
-
-    // Initialize OpenAI client
-    const client = new OpenAI({ apiKey });
-
-    // Generate image
-    const imageResponse = await client.images.generate({
-      model: 'dall-e-3',
-      prompt: `Professional vehicle wrap design for a ${vehicleType} for ${companyName}. Style: ${designDirection}. Photorealistic. High quality.`,
-      n: 1,
-      size: '1024x1024',
-    });
-
-    const imageUrl = imageResponse.data[0]?.url || '';
-
-    // Generate text concept
-    const textResponse = await client.chat.completions.create({
-      model: 'gpt-4-turbo',
-      messages: [
-        {
-          role: 'user',
-          content: `Create a vehicle wrap design concept for a ${vehicleType} for company "${companyName}" with style "${designDirection}". Respond ONLY with valid JSON: {"conceptTitle":"...","creativeRationale":"..."}`,
-        },
-      ],
-      max_tokens: 300,
-    });
-
-    let conceptTitle = `${companyName} ${vehicleType} Wrap`;
-    let creativeRationale = 'Professional vehicle wrap design';
-
-    try {
-      const content = textResponse.choices[0]?.message?.content || '{}';
-      const parsed = JSON.parse(content);
-      conceptTitle = parsed.conceptTitle || conceptTitle;
-      creativeRationale = parsed.creativeRationale || creativeRationale;
-    } catch {
-      // Use defaults
     }
 
     return NextResponse.json(
       {
         success: true,
         data: {
-          imageUrl,
-          conceptTitle,
-          creativeRationale,
+          imageUrl: '',
+          conceptTitle: `${companyName} ${vehicleType} Wrap Concept`,
+          creativeRationale: `Placeholder concept for ${companyName} based on a ${designDirection} direction for a ${vehicleType}.`,
+        },
+        metadata: {
+          vehicleType,
+          companyName,
+          generatedAt: new Date().toISOString(),
+          mock: true,
         },
       },
-      {
-        status: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
-        },
-      }
+      { status: 200, headers: CORS_HEADERS }
     );
-  } catch (error: any) {
-    console.error('API Error:', error);
+  } catch {
     return NextResponse.json(
-      { error: error.message || 'Failed to generate design' },
-      { status: 500 }
+      { error: 'Invalid request body' },
+      { status: 400, headers: CORS_HEADERS }
     );
   }
 }
 
 export async function OPTIONS() {
-  return NextResponse.json(
-    {},
-    {
-      status: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-    }
-  );
+  return new NextResponse(null, {
+    status: 204,
+    headers: CORS_HEADERS,
+  });
 }
