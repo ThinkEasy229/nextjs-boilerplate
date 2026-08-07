@@ -1,103 +1,316 @@
 import { NextRequest, NextResponse } from 'next/server';
+import OpenAI from 'openai';
 
-const OpenAI = require('openai').default;
+export const runtime = 'nodejs';
+
+type WrapConceptRequest = {
+  vehicleType: string;
+  designDirection: string;
+  companyName: string;
+  contactEmail: string;
+};
+
+type ConceptData = {
+  conceptTitle: string;
+  creativeRationale: string;
+};
+
+const REQUIRED_FIELDS: Array<keyof WrapConceptRequest> = [
+  'vehicleType',
+  'designDirection',
+  'companyName',
+  'contactEmail',
+];
+
+function getAllowedOrigins(): string[] {
+  return (process.env.FRAMER_ORIGIN ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+function getCorsHeaders(request: NextRequest): HeadersInit {
+  const configuredOrigins = getAllowedOrigins();
+
+  const requestOrigin = request.headers.get('origin') ?? '';
+  const allowOrigin = configuredOrigins.length === 0
+    ? '*'
+    : requestOrigin && configuredOrigins.includes(requestOrigin)
+      ? requestOrigin
+      : '';
+
+  return {
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    Vary: 'Origin',
+    ...(allowOrigin ? { 'Access-Control-Allow-Origin': allowOrigin } : {}),
+  };
+}
+
+function isOriginAllowed(request: NextRequest): boolean {
+  const configuredOrigins = getAllowedOrigins();
+
+  if (configuredOrigins.length === 0) {
+    return true;
+  }
+
+  const requestOrigin = request.headers.get('origin');
+
+  return Boolean(requestOrigin && configuredOrigins.includes(requestOrigin));
+}
+
+function getRejectedCorsHeaders(request: NextRequest): HeadersInit {
+  const requestOrigin = request.headers.get('origin') ?? '';
+
+  return {
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    Vary: 'Origin',
+    ...(requestOrigin ? { 'Access-Control-Allow-Origin': requestOrigin } : {}),
+  };
+}
+
+function badRequest(message: string, headers: HeadersInit) {
+  return NextResponse.json({ success: false, error: message }, { status: 400, headers });
+}
+
+function isValidEmail(value: string): boolean {
+  if (!value || value.length > 254 || value.includes(' ')) {
+    return false;
+  }
+
+  const atIndex = value.indexOf('@');
+  if (atIndex <= 0 || atIndex !== value.lastIndexOf('@') || atIndex === value.length - 1) {
+    return false;
+  }
+
+  const localPart = value.slice(0, atIndex);
+  const domainPart = value.slice(atIndex + 1);
+
+  if (!localPart || !domainPart || domainPart.startsWith('.') || domainPart.endsWith('.')) {
+    return false;
+  }
+
+  return domainPart.includes('.');
+}
+
+function parseConcept(rawContent: string | null | undefined, fallbackCompanyName: string, fallbackVehicleType: string): ConceptData {
+  const fallback: ConceptData = {
+    conceptTitle: `${fallbackCompanyName} ${fallbackVehicleType} Wrap Concept`,
+    creativeRationale: `A professional ${fallbackVehicleType} wrap concept for ${fallbackCompanyName} based on the provided design direction.`,
+  };
+
+  if (!rawContent) {
+    return fallback;
+  }
+
+  const trimmed = rawContent.trim();
+
+  try {
+    const parsed = JSON.parse(trimmed) as Partial<ConceptData>;
+    if (parsed.conceptTitle && parsed.creativeRationale) {
+      return {
+        conceptTitle: parsed.conceptTitle,
+        creativeRationale: parsed.creativeRationale,
+      };
+    }
+
+    return fallback;
+  } catch {
+    const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]) as Partial<ConceptData>;
+        if (parsed.conceptTitle && parsed.creativeRationale) {
+          return {
+            conceptTitle: parsed.conceptTitle,
+            creativeRationale: parsed.creativeRationale,
+          };
+        }
+      } catch {
+        return fallback;
+      }
+    }
+  }
+
+  return fallback;
+}
+
+export async function GET(request: NextRequest) {
+  if (!isOriginAllowed(request)) {
+    return NextResponse.json(
+      { success: false, error: 'Origin not allowed' },
+      { status: 403, headers: getRejectedCorsHeaders(request) }
+    );
+  }
+
+  const headers = getCorsHeaders(request);
+
+  return NextResponse.json(
+    {
+      status: 'ok',
+      message: 'Wrap Concept Generator API is live',
+      endpoint: '/api/wrap-concept',
+      timestamp: new Date().toISOString(),
+    },
+    { headers }
+  );
+}
+
+export async function OPTIONS(request: NextRequest) {
+  if (!isOriginAllowed(request)) {
+    return new NextResponse(null, {
+      status: 403,
+      headers: getRejectedCorsHeaders(request),
+    });
+  }
+
+  return new NextResponse(null, {
+    status: 204,
+    headers: getCorsHeaders(request),
+  });
+}
 
 export async function POST(request: NextRequest) {
+  if (!isOriginAllowed(request)) {
+    return NextResponse.json(
+      { success: false, error: 'Origin not allowed' },
+      { status: 403, headers: getRejectedCorsHeaders(request) }
+    );
+  }
+
+  const headers = getCorsHeaders(request);
+
+  let body: Partial<WrapConceptRequest>;
   try {
-    const body = await request.json();
-    const { vehicleType, designDirection, companyName, contactEmail } = body;
+    body = (await request.json()) as Partial<WrapConceptRequest>;
+  } catch {
+    return badRequest('Invalid JSON body', headers);
+  }
 
-    // Validate input
-    if (!vehicleType || !designDirection || !companyName || !contactEmail) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
-    }
+  const normalizedBody = {
+    vehicleType: body.vehicleType?.trim() ?? '',
+    designDirection: body.designDirection?.trim() ?? '',
+    companyName: body.companyName?.trim() ?? '',
+    contactEmail: body.contactEmail?.trim() ?? '',
+  };
 
-    // Get API key
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'OpenAI API key not configured' },
-        { status: 500 }
-      );
-    }
+  const missingField = REQUIRED_FIELDS.find((field) => normalizedBody[field].length === 0);
+  if (missingField) {
+    return badRequest(`Missing required field: ${missingField}`, headers);
+  }
 
-    // Initialize OpenAI client
+  if (!isValidEmail(normalizedBody.contactEmail)) {
+    return badRequest('Invalid contactEmail format', headers);
+  }
+
+  if (normalizedBody.companyName.length > 100) {
+    return badRequest('companyName must be 100 characters or fewer', headers);
+  }
+
+  if (normalizedBody.designDirection.length > 200) {
+    return badRequest('designDirection must be 200 characters or fewer', headers);
+  }
+
+  if (normalizedBody.vehicleType.length > 40) {
+    return badRequest('vehicleType must be 40 characters or fewer', headers);
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json(
+      { success: false, error: 'OpenAI API key is not configured' },
+      { status: 500, headers }
+    );
+  }
+
+  try {
     const client = new OpenAI({ apiKey });
 
-    // Generate image
+    const imagePrompt = [
+      `Create a professional, photorealistic vehicle wrap design for a ${normalizedBody.vehicleType}.`,
+      `Company name: ${normalizedBody.companyName}.`,
+      `Design direction: ${normalizedBody.designDirection}.`,
+      'Prioritize brand visibility, legibility, and clean commercial styling.',
+      'Show a complete, polished wrap concept mockup.',
+    ].join(' ');
+
     const imageResponse = await client.images.generate({
       model: 'dall-e-3',
-      prompt: `Professional vehicle wrap design for a ${vehicleType} for ${companyName}. Style: ${designDirection}. Photorealistic. High quality.`,
+      prompt: imagePrompt,
       n: 1,
       size: '1024x1024',
+      quality: 'standard',
     });
 
-    const imageUrl = imageResponse.data[0]?.url || '';
+    const imageUrl = imageResponse.data?.find((item) => typeof item.url === 'string')?.url;
 
-    // Generate text concept
-    const textResponse = await client.chat.completions.create({
-      model: 'gpt-4-turbo',
+    if (!imageUrl) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to generate wrap image' },
+        { status: 502, headers }
+      );
+    }
+
+    const conceptResponse = await client.chat.completions.create({
+      model: 'gpt-4o',
+      temperature: 0.7,
       messages: [
         {
+          role: 'system',
+          content:
+            'You are a senior vehicle-wrap creative director. Respond with valid JSON only. No markdown.',
+        },
+        {
           role: 'user',
-          content: `Create a vehicle wrap design concept for a ${vehicleType} for company "${companyName}" with style "${designDirection}". Respond ONLY with valid JSON: {"conceptTitle":"...","creativeRationale":"..."}`,
+          content: [
+            'Create concise concept copy for this vehicle wrap request:',
+            `- Vehicle type: ${normalizedBody.vehicleType}`,
+            `- Company name: ${normalizedBody.companyName}`,
+            `- Design direction: ${normalizedBody.designDirection}`,
+            'Return exactly this JSON shape:',
+            '{"conceptTitle":"...","creativeRationale":"..."}',
+          ].join('\n'),
         },
       ],
-      max_tokens: 300,
+      max_tokens: 250,
     });
 
-    let conceptTitle = `${companyName} ${vehicleType} Wrap`;
-    let creativeRationale = 'Professional vehicle wrap design';
-
-    try {
-      const content = textResponse.choices[0]?.message?.content || '{}';
-      const parsed = JSON.parse(content);
-      conceptTitle = parsed.conceptTitle || conceptTitle;
-      creativeRationale = parsed.creativeRationale || creativeRationale;
-    } catch {
-      // Use defaults
-    }
+    const concept = parseConcept(
+      conceptResponse.choices[0]?.message?.content,
+      normalizedBody.companyName,
+      normalizedBody.vehicleType
+    );
 
     return NextResponse.json(
       {
         success: true,
-        data: {
-          imageUrl,
-          conceptTitle,
-          creativeRationale,
+        imageUrl,
+        conceptTitle: concept.conceptTitle,
+        creativeRationale: concept.creativeRationale,
+        metadata: {
+          vehicleType: normalizedBody.vehicleType,
+          companyName: normalizedBody.companyName,
+          generatedAt: new Date().toISOString(),
         },
       },
-      {
-        status: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
-        },
-      }
+      { status: 200, headers }
     );
-  } catch (error: any) {
-    console.error('API Error:', error);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const status = message.toLowerCase().includes('rate limit') ? 429 : 500;
+
+    if (status === 429) {
+      return NextResponse.json(
+        { success: false, error: 'OpenAI rate limit reached. Please retry shortly.' },
+        { status, headers }
+      );
+    }
+
+    console.error('Wrap concept generation failed', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to generate design' },
-      { status: 500 }
+      { success: false, error: 'Failed to generate wrap concept' },
+      { status, headers }
     );
   }
-}
-
-export async function OPTIONS() {
-  return NextResponse.json(
-    {},
-    {
-      status: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-    }
-  );
 }
