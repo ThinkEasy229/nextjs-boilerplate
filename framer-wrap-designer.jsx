@@ -23,6 +23,9 @@ const inputStyle = {
 
 export default function VehicleWrapDesigner({ apiUrl = DEFAULT_API_URL, title = 'AI Vehicle Wrap Designer' }) {
   const [vehicleType, setVehicleType] = useState('');
+  const [vehicleYear, setVehicleYear] = useState('');
+  const [vehicleMake, setVehicleMake] = useState('');
+  const [vehicleModel, setVehicleModel] = useState('');
   const [designDirection, setDesignDirection] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
@@ -34,6 +37,9 @@ export default function VehicleWrapDesigner({ apiUrl = DEFAULT_API_URL, title = 
 
   const resetForm = () => {
     setVehicleType('');
+    setVehicleYear('');
+    setVehicleMake('');
+    setVehicleModel('');
     setDesignDirection('');
     setCompanyName('');
     setContactEmail('');
@@ -55,6 +61,9 @@ export default function VehicleWrapDesigner({ apiUrl = DEFAULT_API_URL, title = 
         },
         body: JSON.stringify({
           vehicleType,
+          vehicleYear,
+          vehicleMake,
+          vehicleModel,
           designDirection,
           companyName,
           contactEmail,
@@ -70,19 +79,14 @@ export default function VehicleWrapDesigner({ apiUrl = DEFAULT_API_URL, title = 
         return;
       }
 
-      const concept = payload?.data?.concepts?.[0]
-        ? {
-            imageUrl: payload.data.concepts[0].mockupImage,
-            conceptTitle: payload.data.concepts[0].title,
-            creativeRationale: payload.data.concepts[0].rationale,
-          }
-        : payload.imageUrl
-          ? payload
-          : payload.data ?? payload;
       setResult({
-        imageUrl: concept.imageUrl,
-        conceptTitle: concept.conceptTitle,
-        creativeRationale: concept.creativeRationale,
+        imageUrl: payload?.data?.imageUrl || payload?.imageUrl,
+        conceptTitle: `${vehicleYear} ${vehicleMake} ${vehicleModel} Wrap Concept`,
+        creativeDirections: [
+          payload?.data?.creativeDirectionOne,
+          payload?.data?.creativeDirectionTwo,
+          payload?.data?.creativeDirectionThree,
+        ].filter(Boolean),
       });
       resetForm();
     } catch (submitError) {
@@ -109,6 +113,42 @@ export default function VehicleWrapDesigner({ apiUrl = DEFAULT_API_URL, title = 
             <option value="semi-truck">Semi Truck</option>
             <option value="pickup">Pickup Truck</option>
           </select>
+        </div>
+
+        <div>
+          <label style={fieldLabelStyle}>Vehicle Year</label>
+          <input
+            type="text"
+            value={vehicleYear}
+            onChange={(event) => setVehicleYear(event.target.value)}
+            placeholder="2024"
+            required
+            style={inputStyle}
+          />
+        </div>
+
+        <div>
+          <label style={fieldLabelStyle}>Vehicle Make</label>
+          <input
+            type="text"
+            value={vehicleMake}
+            onChange={(event) => setVehicleMake(event.target.value)}
+            placeholder="Ford"
+            required
+            style={inputStyle}
+          />
+        </div>
+
+        <div>
+          <label style={fieldLabelStyle}>Vehicle Model</label>
+          <input
+            type="text"
+            value={vehicleModel}
+            onChange={(event) => setVehicleModel(event.target.value)}
+            placeholder="Transit"
+            required
+            style={inputStyle}
+          />
         </div>
 
         <div>
@@ -198,6 +238,7 @@ export default function VehicleWrapDesigner({ apiUrl = DEFAULT_API_URL, title = 
       {result ? (
         <section style={{ marginTop: '20px', padding: '16px', borderRadius: '10px', backgroundColor: '#f8fafc' }}>
           {result.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={result.imageUrl}
               alt={result.conceptTitle || 'Vehicle wrap concept image'}
@@ -205,7 +246,13 @@ export default function VehicleWrapDesigner({ apiUrl = DEFAULT_API_URL, title = 
             />
           ) : null}
           <h3 style={{ marginTop: 0 }}>{result.conceptTitle}</h3>
-          <p style={{ marginBottom: 0 }}>{result.creativeRationale}</p>
+          <div style={{ display: 'grid', gap: '10px' }}>
+            {result.creativeDirections?.map((direction, index) => (
+              <p key={direction} style={{ margin: 0 }}>
+                <strong>Direction {index + 1}:</strong> {direction}
+              </p>
+            ))}
+          </div>
         </section>
       ) : null}
     </div>

@@ -66,10 +66,15 @@ Open http://localhost:3000 in your browser.
 curl -X POST http://localhost:3000/api/wrap-concept \
   -H "Content-Type: application/json" \
   -d '{
-    "vehicleType": "van",
+    "vehicleType": "cargo-van",
+    "vehicleYear": "2024",
+    "vehicleMake": "Ford",
+    "vehicleModel": "Transit",
     "designDirection": "Modern, minimalist design with geometric patterns",
     "companyName": "TechFlow Solutions",
-    "contactEmail": "design@techflow.com"
+    "contactEmail": "design@techflow.com",
+    "industry": "Commercial HVAC",
+    "preferredColors": "Blue, white, silver"
   }'
 ```
 
@@ -81,10 +86,15 @@ Once deployment succeeds, test with:
 curl -X POST https://nextjs-boilerplate-wrap-lab.vercel.app/api/wrap-concept \
   -H "Content-Type: application/json" \
   -d '{
-    "vehicleType": "truck",
+    "vehicleType": "pickup",
+    "vehicleYear": "2024",
+    "vehicleMake": "Ford",
+    "vehicleModel": "F-150",
     "designDirection": "Bold, vibrant colors with company branding",
     "companyName": "Your Company Name",
-    "contactEmail": "your@email.com"
+    "contactEmail": "your@email.com",
+    "industry": "Home services",
+    "preferredColors": "Black, orange, white"
   }'
 ```
 
@@ -95,12 +105,12 @@ curl -X POST https://nextjs-boilerplate-wrap-lab.vercel.app/api/wrap-concept \
   "success": true,
   "data": {
     "imageUrl": "https://...",
-    "conceptTitle": "Your Company Wrap Design",
-    "creativeRationale": "Professional vehicle wrap concept..."
+    "creativeDirectionOne": "...",
+    "creativeDirectionTwo": "...",
+    "creativeDirectionThree": "..."
   },
   "metadata": {
-    "vehicleType": "truck",
-    "companyName": "Your Company Name",
+    "source": "ai",
     "generatedAt": "2024-01-01T00:00:00.000Z"
   }
 }

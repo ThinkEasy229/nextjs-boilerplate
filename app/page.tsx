@@ -13,6 +13,9 @@ import {
 
 const initialForm: WrapDesignRequest = {
   vehicleType: VEHICLE_LIBRARY[0].id,
+  vehicleYear: '',
+  vehicleMake: '',
+  vehicleModel: '',
   companyName: '',
   contactEmail: '',
   industry: '',
@@ -33,6 +36,9 @@ export default function Home() {
   const previewRequest = useMemo<WrapDesignRequest>(
     () => ({
       vehicleType: form.vehicleType,
+      vehicleYear: form.vehicleYear || '2024',
+      vehicleMake: form.vehicleMake || 'Ford',
+      vehicleModel: form.vehicleModel || 'Transit',
       companyName: form.companyName || 'Your Company',
       contactEmail: form.contactEmail || 'brand@example.com',
       industry: form.industry || 'Commercial services',
@@ -48,12 +54,15 @@ export default function Home() {
     () => createFallbackConcepts(previewRequest, salesContact.salesEmail),
     [previewRequest, salesContact.salesEmail]
   );
-  const activeSession = result?.data ?? previewSession;
-  const selectedConcept = activeSession.concepts[selectedConceptIndex] ?? activeSession.concepts[0];
-  const selectedVehicle = activeSession.selectedVehicle;
+  const selectedConcept = previewSession.concepts?.[selectedConceptIndex] ?? previewSession.concepts?.[0];
+  const selectedVehicle = result?.data.selectedVehicle ?? previewSession.selectedVehicle;
+  const vehicleSpecs = result?.data.vehicleSpecs ?? previewSession.vehicleSpecs;
+  const creativeDirections = result?.data.creativeDirections ?? previewSession.creativeDirections;
+  const displayImageUrl = result?.data.imageUrl ?? selectedConcept?.mockupImage ?? previewSession.imageUrl;
+  const activeContact = result?.data.contact ?? previewSession.contact;
   const canGenerate = validateWrapConceptParams(form);
-  const contactHref = `${activeSession.contact.salesMailto}&body=${encodeURIComponent(
-    `Company: ${form.companyName}\nVehicle: ${selectedVehicle.label}\nConcept: ${selectedConcept.title}\nNotes: ${form.designDirection}`
+  const contactHref = `${activeContact.salesMailto}&body=${encodeURIComponent(
+    `Company: ${form.companyName}\nVehicle: ${vehicleSpecs.vehicleYear} ${vehicleSpecs.vehicleMake} ${vehicleSpecs.vehicleModel} (${selectedVehicle.label})\nNotes: ${form.designDirection}`
   )}`;
   const purchaseHref = process.env.NEXT_PUBLIC_PREMIUM_CHECKOUT_URL || contactHref;
 
@@ -141,7 +150,25 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-3">
+                <Field
+                  label="Vehicle year"
+                  value={form.vehicleYear}
+                  placeholder="2024"
+                  onChange={(value) => setForm((current) => ({ ...current, vehicleYear: value }))}
+                />
+                <Field
+                  label="Vehicle make"
+                  value={form.vehicleMake}
+                  placeholder="Ford"
+                  onChange={(value) => setForm((current) => ({ ...current, vehicleMake: value }))}
+                />
+                <Field
+                  label="Vehicle model"
+                  value={form.vehicleModel}
+                  placeholder="Transit"
+                  onChange={(value) => setForm((current) => ({ ...current, vehicleModel: value }))}
+                />
                 <Field
                   label="Company name"
                   value={form.companyName}
@@ -217,54 +244,92 @@ export default function Home() {
             <div className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-slate-900 via-slate-950 to-cyan-950/60 p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm uppercase tracking-[0.24em] text-cyan-200">Real-time preview</p>
-                  <h2 className="mt-2 text-2xl font-semibold text-white">{selectedConcept.title}</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">{selectedConcept.headline}</p>
+                  <p className="text-sm uppercase tracking-[0.24em] text-cyan-200">
+                    {result ? 'OpenAI vehicle wrap render' : 'Real-time preview'}
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">
+                    {vehicleSpecs.vehicleYear} {vehicleSpecs.vehicleMake} {vehicleSpecs.vehicleModel}
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">
+                    {result
+                      ? `Generated wrap concept for ${form.companyName || 'your company'} on a ${selectedVehicle.label.toLowerCase()}.`
+                      : selectedConcept?.headline}
+                  </p>
                 </div>
                 <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
-                  {result ? 'AI session ready' : 'Live preview'}
+                  {result ? 'AI image ready' : 'Live preview'}
                 </span>
               </div>
 
               <div className="mt-5 overflow-hidden rounded-[1.5rem] border border-white/10 bg-white">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={selectedConcept.mockupImage}
-                  alt={`${selectedVehicle.label} wrap preview for ${form.companyName}`}
+                  src={displayImageUrl}
+                  alt={`${vehicleSpecs.vehicleYear} ${vehicleSpecs.vehicleMake} ${vehicleSpecs.vehicleModel} wrap preview for ${form.companyName || 'your company'}`}
                   className="h-auto w-full"
                 />
               </div>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                {selectedConcept.palette.map((color) => (
-                  <div key={color} className="rounded-2xl border border-white/10 bg-slate-900/70 p-3">
-                    <div className="h-8 rounded-xl" style={{ backgroundColor: color }} />
-                    <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">{color}</p>
-                  </div>
-                ))}
+              <div className="mt-5 grid gap-3 sm:grid-cols-4">
+                <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Vehicle type</p>
+                  <p className="mt-2 text-sm font-medium text-white">{selectedVehicle.label}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Year</p>
+                  <p className="mt-2 text-sm font-medium text-white">{vehicleSpecs.vehicleYear}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Make</p>
+                  <p className="mt-2 text-sm font-medium text-white">{vehicleSpecs.vehicleMake}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Model</p>
+                  <p className="mt-2 text-sm font-medium text-white">{vehicleSpecs.vehicleModel}</p>
+                </div>
               </div>
 
-              <div className="mt-5 grid gap-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
-                <div>
-                  <p className="text-sm font-semibold text-white">Layout strategy</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">{selectedConcept.layout}</p>
+              {result ? (
+                <div className="mt-5 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                  <p className="text-sm font-semibold text-white">Primary direction used for the render</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">{creativeDirections[0]}</p>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">Why this sells</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">{selectedConcept.rationale}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">Premium upsell</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">{selectedConcept.premiumFeature}</p>
-                </div>
-              </div>
+              ) : selectedConcept ? (
+                <>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    {selectedConcept.palette.map((color) => (
+                      <div key={color} className="rounded-2xl border border-white/10 bg-slate-900/70 p-3">
+                        <div className="h-8 rounded-xl" style={{ backgroundColor: color }} />
+                        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">{color}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-5 grid gap-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                    <div>
+                      <p className="text-sm font-semibold text-white">Layout strategy</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">{selectedConcept.layout}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Why this sells</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">{selectedConcept.rationale}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Premium upsell</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">{selectedConcept.premiumFeature}</p>
+                    </div>
+                  </div>
+                </>
+              ) : null}
             </div>
 
             <div className="rounded-[2rem] border border-white/10 bg-slate-900/60 p-5">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-sm uppercase tracking-[0.24em] text-slate-400">3. Review the design gallery</p>
-                  <h3 className="mt-2 text-2xl font-semibold text-white">Template options built for this brief</h3>
+                  <p className="text-sm uppercase tracking-[0.24em] text-slate-400">3. Review the creative directions</p>
+                  <h3 className="mt-2 text-2xl font-semibold text-white">
+                    {result ? 'Three written directions returned by GPT-4' : 'Preview directions built for this brief'}
+                  </h3>
                 </div>
                 {result?.metadata.source ? (
                   <span className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
@@ -274,26 +339,35 @@ export default function Home() {
               </div>
 
               <div className="mt-5 grid gap-3">
-                {activeSession.gallery.map((concept, index) => {
-                  const isSelected = selectedConcept.id === concept.id;
+                {creativeDirections.map((direction, index) => {
+                  const isSelected = index === selectedConceptIndex;
+
+                  if (result) {
+                    return (
+                      <div key={direction} className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-base font-semibold text-white">Direction {index + 1}</p>
+                          <span className="text-xs uppercase tracking-[0.2em] text-slate-400">GPT-4</span>
+                        </div>
+                        <p className="mt-3 text-sm leading-6 text-slate-300">{direction}</p>
+                      </div>
+                    );
+                  }
+
                   return (
                     <button
-                      key={concept.id}
+                      key={direction}
                       type="button"
                       onClick={() => setSelectedConceptIndex(index)}
-                      className={`grid gap-4 rounded-2xl border p-3 text-left transition sm:grid-cols-[140px_1fr] ${
+                      className={`rounded-2xl border p-4 text-left transition ${
                         isSelected ? 'border-cyan-400 bg-cyan-400/10' : 'border-white/10 hover:border-white/30'
                       }`}
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={concept.image} alt={concept.title} className="w-full rounded-xl border border-white/10 bg-white" />
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-base font-semibold text-white">{concept.title}</p>
-                          <span className="text-xs uppercase tracking-[0.2em] text-slate-400">Option {index + 1}</span>
-                        </div>
-                        <p className="text-sm leading-6 text-slate-300">{concept.description}</p>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-base font-semibold text-white">Direction {index + 1}</p>
+                        <span className="text-xs uppercase tracking-[0.2em] text-slate-400">Preview</span>
                       </div>
+                      <p className="mt-3 text-sm leading-6 text-slate-300">{direction}</p>
                     </button>
                   );
                 })}

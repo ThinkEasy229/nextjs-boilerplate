@@ -8,6 +8,9 @@ import { generateWrapConcept } from '@/lib/wrap-concept-client';
 export async function testWrapConceptAPI() {
   const testParams = {
     vehicleType: 'cargo-van',
+    vehicleYear: '2024',
+    vehicleMake: 'Ford',
+    vehicleModel: 'Transit',
     designDirection: 'Modern, minimalist design with geometric patterns and strong roadside readability.',
     companyName: 'TechFlow Solutions',
     contactEmail: 'design@techflow.com',
@@ -28,8 +31,8 @@ export async function testWrapConceptAPI() {
     console.log('✅ API Response:', result);
     console.log('🧾 Session ID:', result.data.sessionId);
     console.log('🚐 Vehicle:', result.data.selectedVehicle.label);
-    console.log('📝 Title:', result.data.concepts[0]?.title);
-    console.log('💡 Rationale:', result.data.concepts[0]?.rationale);
+    console.log('🖼️ Image URL:', result.data.imageUrl);
+    console.log('💡 Direction 1:', result.data.creativeDirectionOne);
 
     return result;
   } catch (error) {
