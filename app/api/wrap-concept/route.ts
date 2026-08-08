@@ -221,7 +221,7 @@ export async function POST(req: NextRequest) {
       "Server misconfiguration",
       headers,
       500,
-      "Missing OPENAI_API_KEY"
+      "Service is not configured correctly."
     );
   }
 
@@ -283,6 +283,7 @@ export async function POST(req: NextRequest) {
     const conceptCompletion = await openai.chat.completions.create({
       model: process.env.OPENAI_TEXT_MODEL || "gpt-4o",
       temperature: 0.8,
+      response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
