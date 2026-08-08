@@ -44,22 +44,28 @@ Content-Type: application/json
 
 ```json
 {
-  "vehicleType": "van",
+  "vehicleType": "cargo-van",
+  "vehicleYear": "2024",
+  "vehicleMake": "Ford",
+  "vehicleModel": "Transit",
   "designDirection": "Modern, minimalist design with geometric patterns. Use company colors blue and white. Include the logo prominently.",
   "companyName": "TechFlow Solutions",
   "contactEmail": "design@techflow.com",
-  "revisionNotes": "Make the design more vibrant, add more brand personality"
+  "industry": "Commercial HVAC",
+  "preferredColors": "Blue, white, silver"
 }
 ```
 
 **Required Fields:**
-- `vehicleType` (string, 1-100 chars): Type of vehicle (e.g., "van", "truck", "car", "bus")
+- `vehicleType` (string): Supported vehicle option id (e.g., `cargo-van`, `box-truck`, `pickup`)
+- `vehicleYear` (string): 4-digit vehicle year
+- `vehicleMake` (string): Vehicle manufacturer (e.g., `Ford`)
+- `vehicleModel` (string): Vehicle model (e.g., `Transit`)
 - `designDirection` (string, 1-500 chars): Creative direction for the wrap design
 - `companyName` (string, 1-200 chars): Name of the company
 - `contactEmail` (string): Valid email address for the contact
-
-**Optional Fields:**
-- `revisionNotes` (string, 0-500 chars): Any revision feedback to incorporate
+- `industry` (string): Business industry
+- `preferredColors` (string): Preferred brand colors
 
 ### Response (Success)
 
@@ -70,13 +76,26 @@ Content-Type: application/json
   "success": true,
   "data": {
     "imageUrl": "https://oaidalleapiprodscus.blob.core.windows.net/private/...",
-    "conceptTitle": "TechFlow Van Wrap Modern Identity",
-    "creativRationale": "The design incorporates TechFlow's brand colors with clean geometric patterns, creating a professional yet dynamic appearance that stands out on the road."
+    "creativeDirectionOne": "A modern geometric wrap that uses high-contrast blue and white panels to make the Transit feel fast, technical, and easy to read from a distance.",
+    "creativeDirectionTwo": "A premium corporate direction with larger white space, refined metallic silver accents, and a strong door-logo anchor for a more established look.",
+    "creativeDirectionThree": "A bolder campaign-style direction that turns the side panel into a hero message zone with large service callouts and vivid blue motion graphics.",
+    "vehicleSpecs": {
+      "vehicleType": "cargo-van",
+      "vehicleYear": "2024",
+      "vehicleMake": "Ford",
+      "vehicleModel": "Transit"
+    }
   },
   "metadata": {
-    "vehicleType": "van",
-    "companyName": "TechFlow Solutions",
-    "generatedAt": "2024-08-07T14:30:00.000Z"
+    "source": "ai",
+    "generatedAt": "2024-08-07T14:30:00.000Z",
+    "imageUrlExpiresAt": "2024-08-07T15:25:00.000Z",
+    "vehicle": {
+      "vehicleType": "cargo-van",
+      "vehicleYear": "2024",
+      "vehicleMake": "Ford",
+      "vehicleModel": "Transit"
+    }
   }
 }
 ```
@@ -87,7 +106,7 @@ Content-Type: application/json
 
 ```json
 {
-  "error": "contactEmail is required and must be a valid email address"
+  "error": "vehicleYear is required and must be a 4-digit year string."
 }
 ```
 
@@ -96,9 +115,10 @@ Content-Type: application/json
 | Code | Scenario | Solution |
 |------|----------|----------|
 | `400` | Invalid input (missing fields, invalid format) | Check request payload against schema |
+| `410` | Stored generated image URL has expired | Generate a fresh wrap preview |
 | `429` | Rate limit or quota exceeded | Wait before retrying; check OpenAI account |
 | `503` | OpenAI service error | Retry after a few moments |
-| `500` | Server error | Check logs; verify API key is set |
+| `500` | Server configuration or authentication error | Check logs; verify API key is set |
 
 ## Integration Example
 
@@ -111,17 +131,23 @@ async function createWrapConcept() {
   try {
     const response = await generateWrapConcept(
       {
-        vehicleType: 'van',
+        vehicleType: 'cargo-van',
+        vehicleYear: '2024',
+        vehicleMake: 'Ford',
+        vehicleModel: 'Transit',
         designDirection: 'Modern, minimalist design with geometric patterns',
         companyName: 'TechFlow Solutions',
         contactEmail: 'design@techflow.com',
+        industry: 'Commercial HVAC',
+        preferredColors: 'Blue, white, silver',
       },
       'https://your-domain.com' // Your API URL
     );
 
     console.log('Concept Image:', response.data.imageUrl);
-    console.log('Title:', response.data.conceptTitle);
-    console.log('Rationale:', response.data.creativRationale);
+    console.log('Direction 1:', response.data.creativeDirectionOne);
+    console.log('Direction 2:', response.data.creativeDirectionTwo);
+    console.log('Direction 3:', response.data.creativeDirectionThree);
   } catch (error) {
     console.error('Failed to generate concept:', error);
   }
@@ -150,10 +176,15 @@ async function generateWrapConcept(params) {
 
 // Usage
 const concept = await generateWrapConcept({
-  vehicleType: 'van',
+  vehicleType: 'cargo-van',
+  vehicleYear: '2024',
+  vehicleMake: 'Ford',
+  vehicleModel: 'Transit',
   designDirection: 'Modern design with company colors',
   companyName: 'TechFlow Solutions',
   contactEmail: 'design@techflow.com',
+  industry: 'Commercial HVAC',
+  preferredColors: 'Blue, white, silver',
 });
 ```
 

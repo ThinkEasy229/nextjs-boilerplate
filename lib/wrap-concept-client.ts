@@ -4,6 +4,7 @@ import type {
   VehicleOption,
   WrapDesignRequest,
   WrapDesignSessionData,
+  WrapVehicleSpecs,
 } from '@/lib/wrap-designer';
 import { validateWrapDesignRequest } from '@/lib/wrap-designer';
 
@@ -23,8 +24,10 @@ export interface WrapConceptResponse {
   data: WrapDesignSessionData;
   metadata: {
     generatedAt: string;
-    source: 'ai' | 'fallback';
+    imageUrlExpiresAt: string;
+    source: 'ai';
     stored: boolean;
+    vehicle: WrapVehicleSpecs;
   };
 }
 

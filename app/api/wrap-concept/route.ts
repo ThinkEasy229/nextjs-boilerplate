@@ -3,12 +3,19 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
+import OpenAI, {
+  APIConnectionError,
+  APIConnectionTimeoutError,
+  AuthenticationError,
+  PermissionDeniedError,
+  RateLimitError,
+} from 'openai';
 import {
-  createFallbackConcepts,
-  createVehicleMockup,
+  getVehicleOption,
+  getVehicleSpecs,
+  getWrapDesignRequestValidationError,
   getSalesContact,
   PREMIUM_PACKAGE,
-  validateWrapDesignRequest,
   VEHICLE_LIBRARY,
   type WrapDesignRequest,
   type WrapDesignSessionData,
@@ -23,7 +30,8 @@ const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-
 interface StoredWrapSession {
   sessionId: string;
   generatedAt: string;
-  source: 'ai' | 'fallback';
+  imageUrlExpiresAt: string;
+  source: 'ai';
   data: WrapDesignSessionData;
 }
 
@@ -53,14 +61,23 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Design session not found' }, { status: 404, headers });
       }
 
+      if (Date.now() >= Date.parse(stored.imageUrlExpiresAt)) {
+        return NextResponse.json(
+          { error: 'Stored wrap image URL has expired. Please generate a new wrap preview.' },
+          { status: 410, headers }
+        );
+      }
+
       return NextResponse.json(
         {
           success: true,
           data: stored.data,
           metadata: {
             generatedAt: stored.generatedAt,
+            imageUrlExpiresAt: stored.imageUrlExpiresAt,
             source: stored.source,
             stored: true,
+            vehicle: stored.data.vehicleSpecs,
           },
         },
         { headers }
@@ -93,37 +110,33 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = (await request.json()) as WrapDesignRequest;
+    const validationError = getWrapDesignRequestValidationError(body);
 
-    if (!validateWrapDesignRequest(body)) {
+    if (validationError) {
       return NextResponse.json(
-        {
-          error:
-            'Missing required fields: vehicleType, companyName, contactEmail, industry, preferredColors, designDirection',
-        },
+        { error: validationError },
         { status: 400, headers }
+      );
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json(
+        { error: 'OPENAI_API_KEY is not configured on the server.' },
+        { status: 500, headers }
       );
     }
 
     const configuredSalesEmail = process.env.SALES_EMAIL || process.env.NEXT_PUBLIC_SALES_EMAIL;
     const generatedAt = new Date().toISOString();
-
-    let data = createFallbackConcepts(body, configuredSalesEmail);
-    let source: 'ai' | 'fallback' = 'fallback';
-
-    if (process.env.OPENAI_API_KEY) {
-      try {
-        data = await generateAiConcepts(body, configuredSalesEmail);
-        source = 'ai';
-      } catch (error) {
-        console.error('AI wrap concept generation failed, serving fallback concepts instead.', error);
-      }
-    }
+    const imageUrlExpiresAt = new Date(Date.now() + 55 * 60 * 1000).toISOString();
+    const data = await generateAiConcepts(body, configuredSalesEmail);
 
     const sessionId = randomUUID();
     const storedSession: StoredWrapSession = {
       sessionId,
       generatedAt,
-      source,
+      imageUrlExpiresAt,
+      source: 'ai',
       data: {
         ...data,
         sessionId,
@@ -138,18 +151,20 @@ export async function POST(request: NextRequest) {
         data: storedSession.data,
         metadata: {
           generatedAt,
-          source,
+          imageUrlExpiresAt,
+          source: 'ai',
           stored,
+          vehicle: storedSession.data.vehicleSpecs,
         },
       },
       { headers }
     );
   } catch (error) {
+    const { message, status } = getApiErrorResponse(error);
+
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : 'Failed to generate wrap concepts',
-      },
-      { status: 500, headers }
+      { error: message },
+      { status, headers }
     );
   }
 }
@@ -165,78 +180,36 @@ async function generateAiConcepts(
   request: WrapDesignRequest,
   configuredSalesEmail?: string
 ): Promise<WrapDesignSessionData> {
-  const OpenAI = (await import('openai')).default;
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const fallback = createFallbackConcepts(request, configuredSalesEmail);
-
-  const response = await client.chat.completions.create({
-    model: 'gpt-4o-mini',
-    response_format: { type: 'json_object' },
-    messages: [
-      {
-        role: 'system',
-        content:
-          'You create premium vehicle wrap design concepts. Return valid JSON with a "concepts" array of exactly 3 items. Each concept must include title, headline, rationale, graphics (array of 3 short strings), layout, premiumFeature, and palette (array of exactly 3 hex colors).',
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          companyName: request.companyName,
-          industry: request.industry,
-          vehicleType: request.vehicleType,
-          preferredColors: request.preferredColors,
-          designDirection: request.designDirection,
-          tagline: request.tagline || '',
-          goals: request.goals || '',
-        }),
-      },
-    ],
-    max_tokens: 1200,
+  const selectedVehicle = getVehicleOption(request.vehicleType);
+  const contact = getSalesContact(configuredSalesEmail);
+  const creativeDirections = await generateCreativeDirections(client, request);
+  const imagePrompt = buildVehicleWrapImagePrompt(request, selectedVehicle.label, creativeDirections[0]);
+  const imageResponse = await client.images.generate({
+    model: 'dall-e-3',
+    prompt: imagePrompt,
+    size: '1792x1024',
+    quality: 'hd',
+    style: 'vivid',
+    response_format: 'url',
   });
+  const imageUrl = imageResponse.data?.[0]?.url?.trim();
 
-  const content = response.choices[0]?.message.content;
-
-  if (!content) {
-    return fallback;
+  if (!imageUrl) {
+    throw new Error('OpenAI image generation completed without returning an image URL.');
   }
-
-  let parsed: { concepts?: Array<Record<string, unknown>> } = {};
-
-  try {
-    parsed = JSON.parse(content) as { concepts?: Array<Record<string, unknown>> };
-  } catch {
-    return fallback;
-  }
-
-  const concepts = (parsed.concepts || []).slice(0, 3).map((concept, index) => {
-    const fallbackConcept = fallback.concepts[index] || fallback.concepts[0];
-    const palette = normalizePalette(concept.palette, fallbackConcept.palette);
-    const title = asString(concept.title, fallbackConcept.title);
-    const headline = asString(concept.headline, fallbackConcept.headline);
-
-    return {
-      ...fallbackConcept,
-      title,
-      headline,
-      rationale: asString(concept.rationale, fallbackConcept.rationale),
-      graphics: normalizeStringArray(concept.graphics, fallbackConcept.graphics, 3),
-      layout: asString(concept.layout, fallbackConcept.layout),
-      premiumFeature: asString(concept.premiumFeature, fallbackConcept.premiumFeature),
-      palette,
-      mockupImage: createVehicleMockup(fallback.selectedVehicle.id, palette, request.companyName, headline),
-      mockupThumbnail: createVehicleMockup(fallback.selectedVehicle.id, palette, request.companyName, title, true),
-    };
-  });
 
   return {
-    ...fallback,
-    concepts,
-    gallery: concepts.map((concept) => ({
-      id: concept.id,
-      title: concept.title,
-      description: concept.headline,
-      image: concept.mockupThumbnail,
-    })),
+    sessionId: '',
+    selectedVehicle,
+    vehicleSpecs: getVehicleSpecs(request),
+    imageUrl,
+    creativeDirectionOne: creativeDirections[0],
+    creativeDirectionTwo: creativeDirections[1],
+    creativeDirectionThree: creativeDirections[2],
+    creativeDirections,
+    premiumPackage: PREMIUM_PACKAGE,
+    contact,
   };
 }
 
@@ -259,33 +232,120 @@ async function readSession(sessionId: string) {
   }
 }
 
-function asString(value: unknown, fallback: string) {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
-}
+async function generateCreativeDirections(client: OpenAI, request: WrapDesignRequest) {
+  const response = await client.chat.completions.create({
+    model: 'gpt-4o',
+    response_format: { type: 'json_object' },
+    messages: [
+      {
+        role: 'system',
+        content:
+          'You create premium vehicle wrap creative directions. Return valid JSON with exactly three distinct fields named creativeDirectionOne, creativeDirectionTwo, and creativeDirectionThree. Each value must be 2-3 sentences describing a unique visual approach for the specified vehicle wrap.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          vehicleYear: request.vehicleYear,
+          vehicleMake: request.vehicleMake,
+          vehicleModel: request.vehicleModel,
+          vehicleType: request.vehicleType,
+          companyName: request.companyName,
+          industry: request.industry,
+          preferredColors: request.preferredColors,
+          designDirection: request.designDirection,
+          tagline: request.tagline || '',
+          goals: request.goals || '',
+        }),
+      },
+    ],
+    max_tokens: 700,
+  });
 
-function normalizeStringArray(value: unknown, fallback: string[], limit: number) {
-  if (!Array.isArray(value)) {
-    return fallback;
+  const content = response.choices[0]?.message.content;
+
+  if (!content) {
+    throw new Error('OpenAI did not return creative directions.');
   }
 
-  const normalized = value
-    .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
-    .map((entry) => entry.trim())
-    .slice(0, limit);
+  let parsed: Record<string, unknown>;
 
-  return normalized.length === limit ? normalized : fallback;
-}
-
-function normalizePalette(value: unknown, fallback: string[]) {
-  if (!Array.isArray(value)) {
-    return fallback;
+  try {
+    parsed = JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    throw new Error('OpenAI returned creative directions in an unexpected format.');
   }
 
-  const palette = value
-    .filter((entry): entry is string => typeof entry === 'string' && /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(entry))
-    .slice(0, 3);
+  const creativeDirectionOne = asRequiredString(parsed.creativeDirectionOne, 'creativeDirectionOne');
+  const creativeDirectionTwo = asRequiredString(parsed.creativeDirectionTwo, 'creativeDirectionTwo');
+  const creativeDirectionThree = asRequiredString(parsed.creativeDirectionThree, 'creativeDirectionThree');
 
-  return palette.length === 3 ? palette : fallback;
+  return [creativeDirectionOne, creativeDirectionTwo, creativeDirectionThree] as [string, string, string];
+}
+
+function buildVehicleWrapImagePrompt(
+  request: WrapDesignRequest,
+  vehicleLabel: string,
+  primaryCreativeDirection: string
+) {
+  const vehicleDescriptor = `${request.vehicleYear.trim()} ${request.vehicleMake.trim()} ${request.vehicleModel.trim()} ${vehicleLabel}`.trim();
+
+  return [
+    'Create a photorealistic commercial vehicle wrap concept render.',
+    `Vehicle: ${vehicleDescriptor}.`,
+    `Company branding: ${request.companyName.trim()} in the ${request.industry.trim()} industry.`,
+    `Preferred brand colors: ${request.preferredColors.trim()}.`,
+    `Design vision: ${request.designDirection.trim()}.`,
+    `Primary creative direction: ${primaryCreativeDirection}.`,
+    request.tagline?.trim() ? `Include this tagline naturally in the design: ${request.tagline.trim()}.` : '',
+    request.goals?.trim() ? `Business goal: ${request.goals.trim()}.` : '',
+    'Show the full wrapped vehicle in a clean studio setting with premium lighting, realistic proportions, sharp wrap graphics, and no people, watermarks, or extra vehicles.',
+    'Prioritize realistic vehicle geometry and a believable production-ready wrap presentation.',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function asRequiredString(value: unknown, fieldName: string) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`OpenAI did not return a usable ${fieldName} value.`);
+  }
+
+  return value.trim();
+}
+
+function getApiErrorResponse(error: unknown) {
+  if (error instanceof RateLimitError) {
+    return {
+      status: 429,
+      message: 'OpenAI rate limit reached while generating the wrap. Please retry in a few minutes.',
+    };
+  }
+
+  if (error instanceof AuthenticationError) {
+    return {
+      status: 500,
+      message: 'OpenAI authentication failed. Verify the server OPENAI_API_KEY configuration.',
+    };
+  }
+
+  if (error instanceof PermissionDeniedError) {
+    return {
+      status: 500,
+      message: 'OpenAI rejected this request. Verify the API key has permission to use text and image generation.',
+    };
+  }
+
+  if (error instanceof APIConnectionError || error instanceof APIConnectionTimeoutError) {
+    return {
+      status: 503,
+      message: 'OpenAI could not be reached while generating the wrap. Please try again shortly.',
+    };
+  }
+
+  return {
+    status: 500,
+    message: error instanceof Error ? error.message : 'Failed to generate wrap concepts.',
+  };
 }
 
 function getSessionFilePath(sessionId: string) {

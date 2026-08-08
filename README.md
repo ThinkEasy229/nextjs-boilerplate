@@ -4,8 +4,8 @@ Premium Next.js vehicle wrap designer with:
 
 - vehicle-specific selection cards
 - AI-assisted concept generation via `/api/wrap-concept`
-- real-time branded mockup previews
-- concept gallery and premium upsell flow
+- real OpenAI vehicle-wrap renders for submitted briefs
+- three written creative directions plus premium upsell flow
 - direct sales handoff when a customer wants help instead of purchasing
 
 ## Local development
@@ -44,6 +44,9 @@ Accepts:
 ```json
 {
   "vehicleType": "cargo-van",
+  "vehicleYear": "2024",
+  "vehicleMake": "Ford",
+  "vehicleModel": "Transit",
   "companyName": "Wrap Lab Pro",
   "contactEmail": "design@wraplabpro.com",
   "industry": "Commercial fleet branding",
@@ -54,4 +57,4 @@ Accepts:
 }
 ```
 
-Returns three concepts, gallery previews, premium package information, a sales contact path, and a stored session id.
+Returns a single DALL-E image URL, three written creative directions, vehicle metadata, premium package information, a sales contact path, and a stored session id.
