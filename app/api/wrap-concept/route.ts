@@ -26,6 +26,7 @@ export const runtime = 'nodejs';
 const STORAGE_DIRECTORY = path.join(os.tmpdir(), 'wrap-designer');
 const SESSIONS_DIRECTORY = path.join(STORAGE_DIRECTORY, 'sessions');
 const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const WRAP_IMAGE_MODEL = 'gpt-image-1';
 
 interface StoredWrapSession {
   sessionId: string;
@@ -34,6 +35,8 @@ interface StoredWrapSession {
   source: 'ai';
   data: WrapDesignSessionData;
 }
+
+class ImageGenerationError extends Error {}
 
 function getCorsHeaders(request?: NextRequest) {
   const origin = process.env.FRAMER_ORIGIN || request?.headers.get('origin') || request?.nextUrl.origin || 'http://localhost:3000';
@@ -186,15 +189,15 @@ async function generateAiConcepts(
   const creativeDirections = await generateCreativeDirections(client, request);
   const imagePrompt = buildVehicleWrapImagePrompt(request, selectedVehicle.label, creativeDirections[0]);
   const imageResponse = await client.images.generate({
-    model: 'dall-e-3',
+    model: WRAP_IMAGE_MODEL,
     prompt: imagePrompt,
-    size: '1792x1024',
-    quality: 'hd',
   });
-  const imageUrl = imageResponse.data?.[0]?.url?.trim();
+  const imageUrl = getDisplayableImageUrl(imageResponse);
 
   if (!imageUrl) {
-    throw new Error('OpenAI image generation completed without returning an image URL.');
+    throw new ImageGenerationError(
+      `OpenAI image generation failed: ${WRAP_IMAGE_MODEL} did not return a displayable image.`
+    );
   }
 
   return {
@@ -311,6 +314,25 @@ function asRequiredString(value: unknown, fieldName: string) {
   return value.trim();
 }
 
+function getDisplayableImageUrl(imageResponse: {
+  data?: Array<{ url?: string | null; b64_json?: string | null }>;
+}) {
+  const generatedImage = imageResponse.data?.[0];
+  const imageUrl = generatedImage?.url?.trim();
+
+  if (imageUrl) {
+    return imageUrl;
+  }
+
+  const imageBase64 = generatedImage?.b64_json?.trim();
+
+  if (!imageBase64) {
+    return '';
+  }
+
+  return `data:image/png;base64,${imageBase64}`;
+}
+
 function getApiErrorResponse(error: unknown) {
   if (error instanceof RateLimitError) {
     return {
@@ -337,6 +359,13 @@ function getApiErrorResponse(error: unknown) {
     return {
       status: 503,
       message: 'OpenAI could not be reached while generating the wrap. Please try again shortly.',
+    };
+  }
+
+  if (error instanceof ImageGenerationError) {
+    return {
+      status: 502,
+      message: error.message,
     };
   }
 
