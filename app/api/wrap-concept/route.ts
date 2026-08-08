@@ -1,51 +1,98 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  createFallbackConcepts,
+  getSalesContact,
+  getWrapDesignRequestValidationError,
+  PREMIUM_PACKAGE,
+  VEHICLE_LIBRARY,
+  type WrapDesignRequest,
+  type WrapDesignSessionData,
+  type WrapVehicleSpecs,
+  type PremiumPackage,
+  type SalesContact,
+  type VehicleOption,
+} from "@/lib/wrap-designer";
 
 export const runtime = "nodejs";
 
-type WrapConceptRequest = {
-  vehicleType: string;
-  designDirection: string;
-  companyName: string;
-  contactEmail: string;
+type WrapConceptBootstrapResponse = {
+  success: true;
+  data: {
+    availableVehicles: VehicleOption[];
+    premiumPackage: PremiumPackage;
+    contact: SalesContact;
+  };
 };
 
-type WrapConceptResponse = {
-  success: boolean;
-  imageUrl?: string;
-  conceptTitle?: string;
-  creativeRationale?: string;
-  metadata?: {
-    vehicleType: string;
-    companyName: string;
+type WrapConceptSuccessResponse = {
+  success: true;
+  data: WrapDesignSessionData;
+  metadata: {
+    source: "ai";
     generatedAt: string;
+    imageUrlExpiresAt: string;
+    stored: boolean;
+    vehicle: WrapVehicleSpecs;
   };
-  error?: string;
+};
+
+type WrapConceptErrorResponse = {
+  success: false;
+  error: string;
   details?: string;
 };
 
-const FIELD_LIMITS = {
-  vehicleType: 80,
-  designDirection: 800,
-  companyName: 120,
-  contactEmail: 254,
-} as const;
+type WrapConceptResponse =
+  | WrapConceptBootstrapResponse
+  | WrapConceptSuccessResponse
+  | WrapConceptErrorResponse;
+
+type CreativeDirectionPayload = {
+  creativeDirectionOne: string;
+  creativeDirectionTwo: string;
+  creativeDirectionThree: string;
+};
 
 function parseAllowedOrigins(): string[] {
   const raw = process.env.FRAMER_ORIGIN ?? "";
   return raw
     .split(",")
-    .map((s) => s.trim())
+    .map((value) => value.trim())
     .filter(Boolean);
 }
 
-function isOriginAllowed(origin: string | null, allowed: string[]): boolean {
-  if (!origin) return false;
-  return allowed.includes(origin);
+function isOriginAllowed(
+  origin: string | null,
+  allowedOrigins: string[],
+  requestOrigin: string
+): boolean {
+  if (!origin) {
+    return true;
+  }
+
+  if (origin === requestOrigin) {
+    return true;
+  }
+
+  if (allowedOrigins.length === 0) {
+    return true;
+  }
+
+  return allowedOrigins.includes(origin);
 }
 
-function buildCorsHeaders(origin: string | null, allowed: string[]): HeadersInit {
-  const allowOrigin = isOriginAllowed(origin, allowed) ? origin! : "null";
+function buildCorsHeaders(
+  origin: string | null,
+  allowedOrigins: string[],
+  requestOrigin: string
+): HeadersInit {
+  const allowOrigin =
+    allowedOrigins.length === 0
+      ? "*"
+      : origin && isOriginAllowed(origin, allowedOrigins, requestOrigin)
+        ? origin
+        : "null";
 
   return {
     "Access-Control-Allow-Origin": allowOrigin,
@@ -56,104 +103,104 @@ function buildCorsHeaders(origin: string | null, allowed: string[]): HeadersInit
   };
 }
 
-function json(
-  body: WrapConceptResponse,
-  status: number,
-  headers: HeadersInit
-): NextResponse {
+function json(body: WrapConceptResponse, status: number, headers: HeadersInit): NextResponse {
   return NextResponse.json(body, { status, headers });
 }
 
-function normalizeString(v: unknown): string {
-  return typeof v === "string" ? v.trim() : "";
+function normalizeString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+function normalizeOptionalString(value: unknown): string | undefined {
+  const normalized = normalizeString(value);
+  return normalized || undefined;
 }
 
-function validateBody(input: any): { ok: true; value: WrapConceptRequest } | { ok: false; error: string } {
-  const vehicleType = normalizeString(input?.vehicleType);
-  const designDirection = normalizeString(input?.designDirection);
-  const companyName = normalizeString(input?.companyName);
-  const contactEmail = normalizeString(input?.contactEmail);
-
-  if (!vehicleType || !designDirection || !companyName || !contactEmail) {
-    return {
-      ok: false,
-      error:
-        "Missing required fields: vehicleType, designDirection, companyName, contactEmail",
-    };
-  }
-
-  if (vehicleType.length > FIELD_LIMITS.vehicleType) {
-    return { ok: false, error: `vehicleType exceeds ${FIELD_LIMITS.vehicleType} characters` };
-  }
-  if (designDirection.length > FIELD_LIMITS.designDirection) {
-    return {
-      ok: false,
-      error: `designDirection exceeds ${FIELD_LIMITS.designDirection} characters`,
-    };
-  }
-  if (companyName.length > FIELD_LIMITS.companyName) {
-    return { ok: false, error: `companyName exceeds ${FIELD_LIMITS.companyName} characters` };
-  }
-  if (contactEmail.length > FIELD_LIMITS.contactEmail) {
-    return {
-      ok: false,
-      error: `contactEmail exceeds ${FIELD_LIMITS.contactEmail} characters`,
-    };
-  }
-  if (!isValidEmail(contactEmail)) {
-    return { ok: false, error: "Invalid contactEmail format" };
-  }
-
+function normalizeRequest(input: WrapDesignRequest): WrapDesignRequest {
   return {
-    ok: true,
-    value: { vehicleType, designDirection, companyName, contactEmail },
+    vehicleType: normalizeString(input.vehicleType),
+    vehicleYear: normalizeString(input.vehicleYear),
+    vehicleMake: normalizeString(input.vehicleMake),
+    vehicleModel: normalizeString(input.vehicleModel),
+    companyName: normalizeString(input.companyName),
+    contactEmail: normalizeString(input.contactEmail),
+    industry: normalizeString(input.industry),
+    preferredColors: normalizeString(input.preferredColors),
+    designDirection: normalizeString(input.designDirection),
+    tagline: normalizeOptionalString(input.tagline),
+    goals: normalizeOptionalString(input.goals),
   };
 }
 
-function safeConceptFallback(vehicleType: string, companyName: string) {
-  return {
-    conceptTitle: `${companyName} ${vehicleType} Wrap Concept`,
-    creativeRationale:
-      "A clean, brand-forward wrap concept designed for readability, visual impact, and professional on-road presence.",
-  };
-}
-
-function parseConceptJSON(raw: string, vehicleType: string, companyName: string) {
+function parseCreativeDirectionsJSON(
+  raw: string,
+  fallback: WrapDesignSessionData
+): CreativeDirectionPayload {
   try {
-    const parsed = JSON.parse(raw);
-    const conceptTitle = normalizeString(parsed?.conceptTitle);
-    const creativeRationale = normalizeString(parsed?.creativeRationale);
+    const parsed = JSON.parse(raw) as Partial<Record<keyof CreativeDirectionPayload, unknown>>;
+    const creativeDirectionOne = normalizeString(parsed.creativeDirectionOne);
+    const creativeDirectionTwo = normalizeString(parsed.creativeDirectionTwo);
+    const creativeDirectionThree = normalizeString(parsed.creativeDirectionThree);
 
-    if (!conceptTitle || !creativeRationale) {
-      return safeConceptFallback(vehicleType, companyName);
+    if (!creativeDirectionOne || !creativeDirectionTwo || !creativeDirectionThree) {
+      return {
+        creativeDirectionOne: fallback.creativeDirectionOne,
+        creativeDirectionTwo: fallback.creativeDirectionTwo,
+        creativeDirectionThree: fallback.creativeDirectionThree,
+      };
     }
 
-    return { conceptTitle, creativeRationale };
+    return {
+      creativeDirectionOne,
+      creativeDirectionTwo,
+      creativeDirectionThree,
+    };
   } catch {
-    return safeConceptFallback(vehicleType, companyName);
+    return {
+      creativeDirectionOne: fallback.creativeDirectionOne,
+      creativeDirectionTwo: fallback.creativeDirectionTwo,
+      creativeDirectionThree: fallback.creativeDirectionThree,
+    };
   }
+}
+
+function buildErrorResponse(
+  error: string,
+  headers: HeadersInit,
+  status: number,
+  details?: string
+): NextResponse {
+  return json(
+    {
+      success: false,
+      error,
+      ...(details ? { details } : {}),
+    },
+    status,
+    headers
+  );
 }
 
 export async function OPTIONS(req: NextRequest) {
   const origin = req.headers.get("origin");
   const allowedOrigins = parseAllowedOrigins();
-  const headers = buildCorsHeaders(origin, allowedOrigins);
+  const headers = buildCorsHeaders(origin, allowedOrigins, req.nextUrl.origin);
   return new NextResponse(null, { status: 204, headers });
 }
 
 export async function GET(req: NextRequest) {
   const origin = req.headers.get("origin");
   const allowedOrigins = parseAllowedOrigins();
-  const headers = buildCorsHeaders(origin, allowedOrigins);
+  const headers = buildCorsHeaders(origin, allowedOrigins, req.nextUrl.origin);
 
   return json(
     {
       success: true,
-      details: "wrap-concept endpoint is healthy",
+      data: {
+        availableVehicles: VEHICLE_LIBRARY,
+        premiumPackage: PREMIUM_PACKAGE,
+        contact: getSalesContact(process.env.SALES_EMAIL || process.env.NEXT_PUBLIC_SALES_EMAIL),
+      },
     },
     200,
     headers
@@ -163,28 +210,18 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const origin = req.headers.get("origin");
   const allowedOrigins = parseAllowedOrigins();
-  const headers = buildCorsHeaders(origin, allowedOrigins);
+  const headers = buildCorsHeaders(origin, allowedOrigins, req.nextUrl.origin);
 
-  if (!isOriginAllowed(origin, allowedOrigins)) {
-    return json(
-      {
-        success: false,
-        error: "Origin not allowed",
-      },
-      403,
-      headers
-    );
+  if (!isOriginAllowed(origin, allowedOrigins, req.nextUrl.origin)) {
+    return buildErrorResponse("Origin not allowed", headers, 403);
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    return json(
-      {
-        success: false,
-        error: "Server misconfiguration",
-        details: "Missing OPENAI_API_KEY",
-      },
+    return buildErrorResponse(
+      "Server misconfiguration",
+      headers,
       500,
-      headers
+      "Service is not configured correctly."
     );
   }
 
@@ -192,38 +229,34 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return json(
-      {
-        success: false,
-        error: "Invalid JSON body",
-      },
-      400,
-      headers
-    );
+    return buildErrorResponse("Invalid JSON body", headers, 400);
   }
 
-  const validated = validateBody(body);
-  if (!validated.ok) {
-    return json(
-      {
-        success: false,
-        error: validated.error,
-      },
-      400,
-      headers
-    );
+  const validationError = getWrapDesignRequestValidationError(body);
+  if (validationError) {
+    return buildErrorResponse(validationError, headers, 400);
   }
 
-  const normalizedBody = validated.value;
+  const normalizedBody = normalizeRequest(body as WrapDesignRequest);
+  const fallbackSession = createFallbackConcepts(
+    normalizedBody,
+    process.env.SALES_EMAIL || process.env.NEXT_PUBLIC_SALES_EMAIL
+  );
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   try {
     const imagePrompt = [
-      `Create a professional vehicle wrap concept for a ${normalizedBody.vehicleType}.`,
+      `Create a premium, photoreal vehicle wrap concept for a ${normalizedBody.vehicleYear} ${normalizedBody.vehicleMake} ${normalizedBody.vehicleModel} (${normalizedBody.vehicleType}).`,
+      `Company: ${normalizedBody.companyName}.`,
+      `Industry: ${normalizedBody.industry}.`,
+      `Preferred colors: ${normalizedBody.preferredColors}.`,
       `Design direction: ${normalizedBody.designDirection}.`,
-      `Brand/company: ${normalizedBody.companyName}.`,
-      "Photoreal quality concept render, clean composition, realistic lighting, no watermark, no gibberish text.",
-    ].join(" ");
+      normalizedBody.tagline ? `Tagline: ${normalizedBody.tagline}.` : null,
+      normalizedBody.goals ? `Goals: ${normalizedBody.goals}.` : null,
+      "Show realistic branding placement, clear roadside readability, professional composition, realistic lighting, no watermark, and no gibberish text.",
+    ]
+      .filter(Boolean)
+      .join(" ");
 
     const imageResult = await openai.images.generate({
       model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-1",
@@ -239,83 +272,96 @@ export async function POST(req: NextRequest) {
         : null);
 
     if (!imageUrl) {
-      return json(
-        {
-          success: false,
-          error: "Image generation failed",
-          details: "No usable image output returned by upstream model",
-        },
+      return buildErrorResponse(
+        "Image generation failed",
+        headers,
         502,
-        headers
+        "No usable image output returned by upstream model"
       );
     }
 
     const conceptCompletion = await openai.chat.completions.create({
       model: process.env.OPENAI_TEXT_MODEL || "gpt-4o",
       temperature: 0.8,
+      response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
           content:
-            "You are a senior vehicle wrap creative strategist. Return ONLY valid JSON with keys: conceptTitle, creativeRationale.",
+            "You are a senior vehicle wrap creative strategist. Return ONLY valid JSON with keys creativeDirectionOne, creativeDirectionTwo, creativeDirectionThree. Each value must be a concise 2-4 sentence creative direction.",
         },
         {
           role: "user",
           content: [
-            `Vehicle type: ${normalizedBody.vehicleType}`,
+            `Vehicle: ${normalizedBody.vehicleYear} ${normalizedBody.vehicleMake} ${normalizedBody.vehicleModel} (${normalizedBody.vehicleType})`,
             `Company: ${normalizedBody.companyName}`,
+            `Industry: ${normalizedBody.industry}`,
+            `Preferred colors: ${normalizedBody.preferredColors}`,
             `Design direction: ${normalizedBody.designDirection}`,
-            "Write a concise concept title and a persuasive 2-4 sentence rationale.",
-          ].join("\n"),
+            normalizedBody.tagline ? `Tagline: ${normalizedBody.tagline}` : null,
+            normalizedBody.goals ? `Goals: ${normalizedBody.goals}` : null,
+            "Write three distinct premium wrap directions that feel purchase-ready and easy for a sales rep to present.",
+          ]
+            .filter(Boolean)
+            .join("\n"),
         },
       ],
     });
 
-    const conceptRaw = conceptCompletion.choices?.[0]?.message?.content ?? "";
-    const concept = parseConceptJSON(
-      conceptRaw,
-      normalizedBody.vehicleType,
-      normalizedBody.companyName
+    const creativeDirectionPayload = parseCreativeDirectionsJSON(
+      conceptCompletion.choices?.[0]?.message?.content ?? "",
+      fallbackSession
     );
+    const creativeDirections = [
+      creativeDirectionPayload.creativeDirectionOne,
+      creativeDirectionPayload.creativeDirectionTwo,
+      creativeDirectionPayload.creativeDirectionThree,
+    ] as [string, string, string];
+    const generatedAt = new Date().toISOString();
+    const imageUrlExpiresAt = new Date(Date.now() + 55 * 60 * 1000).toISOString();
 
     return json(
       {
         success: true,
-        imageUrl,
-        conceptTitle: concept.conceptTitle,
-        creativeRationale: concept.creativeRationale,
+        data: {
+          ...fallbackSession,
+          imageUrl,
+          creativeDirectionOne: creativeDirections[0],
+          creativeDirectionTwo: creativeDirections[1],
+          creativeDirectionThree: creativeDirections[2],
+          creativeDirections,
+        },
         metadata: {
-          vehicleType: normalizedBody.vehicleType,
-          companyName: normalizedBody.companyName,
-          generatedAt: new Date().toISOString(),
+          source: "ai",
+          generatedAt,
+          imageUrlExpiresAt,
+          stored: false,
+          vehicle: fallbackSession.vehicleSpecs,
         },
       },
       200,
       headers
     );
-  } catch (err: any) {
-    const status = Number(err?.status) || 500;
+  } catch (err: unknown) {
+    const status =
+      typeof err === "object" && err !== null && "status" in err
+        ? Number((err as { status?: unknown }).status) || 500
+        : 500;
 
     if (status === 429) {
-      return json(
-        {
-          success: false,
-          error: "Rate limit exceeded",
-          details: "Please try again shortly.",
-        },
+      return buildErrorResponse(
+        "Rate limit exceeded",
+        headers,
         429,
-        headers
+        "Please try again shortly."
       );
     }
 
-    return json(
-      {
-        success: false,
-        error: "Upstream generation failed",
-        details: "Unable to generate wrap concept at this time.",
-      },
+    return buildErrorResponse(
+      "Upstream generation failed",
+      headers,
       status >= 400 && status < 600 ? status : 500,
-      headers
+      "Unable to generate wrap concept at this time."
     );
   }
 }
