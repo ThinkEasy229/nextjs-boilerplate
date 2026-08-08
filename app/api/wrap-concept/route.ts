@@ -3,7 +3,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
-import type OpenAI from 'openai';
+import OpenAI, {
+  APIConnectionError,
+  APIConnectionTimeoutError,
+  AuthenticationError,
+  PermissionDeniedError,
+  RateLimitError,
+} from 'openai';
 import {
   getVehicleOption,
   getVehicleSpecs,
@@ -24,6 +30,7 @@ const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-
 interface StoredWrapSession {
   sessionId: string;
   generatedAt: string;
+  imageUrlExpiresAt: string;
   source: 'ai';
   data: WrapDesignSessionData;
 }
@@ -54,12 +61,20 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Design session not found' }, { status: 404, headers });
       }
 
+      if (Date.now() >= Date.parse(stored.imageUrlExpiresAt)) {
+        return NextResponse.json(
+          { error: 'Stored wrap image URL has expired. Please generate a new wrap preview.' },
+          { status: 410, headers }
+        );
+      }
+
       return NextResponse.json(
         {
           success: true,
           data: stored.data,
           metadata: {
             generatedAt: stored.generatedAt,
+            imageUrlExpiresAt: stored.imageUrlExpiresAt,
             source: stored.source,
             stored: true,
             vehicle: stored.data.vehicleSpecs,
@@ -113,12 +128,14 @@ export async function POST(request: NextRequest) {
 
     const configuredSalesEmail = process.env.SALES_EMAIL || process.env.NEXT_PUBLIC_SALES_EMAIL;
     const generatedAt = new Date().toISOString();
+    const imageUrlExpiresAt = new Date(Date.now() + 55 * 60 * 1000).toISOString();
     const data = await generateAiConcepts(body, configuredSalesEmail);
 
     const sessionId = randomUUID();
     const storedSession: StoredWrapSession = {
       sessionId,
       generatedAt,
+      imageUrlExpiresAt,
       source: 'ai',
       data: {
         ...data,
@@ -134,6 +151,7 @@ export async function POST(request: NextRequest) {
         data: storedSession.data,
         metadata: {
           generatedAt,
+          imageUrlExpiresAt,
           source: 'ai',
           stored,
           vehicle: storedSession.data.vehicleSpecs,
@@ -162,8 +180,6 @@ async function generateAiConcepts(
   request: WrapDesignRequest,
   configuredSalesEmail?: string
 ): Promise<WrapDesignSessionData> {
-  const openAiModule = await import('openai');
-  const OpenAI = openAiModule.default;
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const selectedVehicle = getVehicleOption(request.vehicleType);
   const contact = getSalesContact(configuredSalesEmail);
@@ -298,37 +314,32 @@ function asRequiredString(value: unknown, fieldName: string) {
 }
 
 function getApiErrorResponse(error: unknown) {
-  if (error && typeof error === 'object') {
-    const maybeError = error as { status?: number; message?: string; constructor?: { name?: string } };
-    const errorName = maybeError.constructor?.name;
+  if (error instanceof RateLimitError) {
+    return {
+      status: 429,
+      message: 'OpenAI rate limit reached while generating the wrap. Please retry in a few minutes.',
+    };
+  }
 
-    if (errorName === 'RateLimitError' || maybeError.status === 429) {
-      return {
-        status: 429,
-        message: 'OpenAI rate limit reached while generating the wrap. Please retry in a few minutes.',
-      };
-    }
+  if (error instanceof AuthenticationError) {
+    return {
+      status: 500,
+      message: 'OpenAI authentication failed. Verify the server OPENAI_API_KEY configuration.',
+    };
+  }
 
-    if (errorName === 'AuthenticationError' || maybeError.status === 401) {
-      return {
-        status: 500,
-        message: 'OpenAI authentication failed. Verify the server OPENAI_API_KEY configuration.',
-      };
-    }
+  if (error instanceof PermissionDeniedError) {
+    return {
+      status: 500,
+      message: 'OpenAI rejected this request. Verify the API key has permission to use text and image generation.',
+    };
+  }
 
-    if (errorName === 'PermissionDeniedError' || maybeError.status === 403) {
-      return {
-        status: 500,
-        message: 'OpenAI rejected this request. Verify the API key has permission to use text and image generation.',
-      };
-    }
-
-    if (errorName === 'APIConnectionError' || errorName === 'APIConnectionTimeoutError') {
-      return {
-        status: 503,
-        message: 'OpenAI could not be reached while generating the wrap. Please try again shortly.',
-      };
-    }
+  if (error instanceof APIConnectionError || error instanceof APIConnectionTimeoutError) {
+    return {
+      status: 503,
+      message: 'OpenAI could not be reached while generating the wrap. Please try again shortly.',
+    };
   }
 
   return {

@@ -111,7 +111,8 @@ curl -X POST https://nextjs-boilerplate-wrap-lab.vercel.app/api/wrap-concept \
   },
   "metadata": {
     "source": "ai",
-    "generatedAt": "2024-01-01T00:00:00.000Z"
+    "generatedAt": "2024-01-01T00:00:00.000Z",
+    "imageUrlExpiresAt": "2024-01-01T00:55:00.000Z"
   }
 }
 ```

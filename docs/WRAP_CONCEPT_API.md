@@ -89,6 +89,7 @@ Content-Type: application/json
   "metadata": {
     "source": "ai",
     "generatedAt": "2024-08-07T14:30:00.000Z",
+    "imageUrlExpiresAt": "2024-08-07T15:25:00.000Z",
     "vehicle": {
       "vehicleType": "cargo-van",
       "vehicleYear": "2024",
@@ -114,6 +115,7 @@ Content-Type: application/json
 | Code | Scenario | Solution |
 |------|----------|----------|
 | `400` | Invalid input (missing fields, invalid format) | Check request payload against schema |
+| `410` | Stored generated image URL has expired | Generate a fresh wrap preview |
 | `429` | Rate limit or quota exceeded | Wait before retrying; check OpenAI account |
 | `503` | OpenAI service error | Retry after a few moments |
 | `500` | Server configuration or authentication error | Check logs; verify API key is set |

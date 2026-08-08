@@ -24,6 +24,7 @@ export interface WrapConceptResponse {
   data: WrapDesignSessionData;
   metadata: {
     generatedAt: string;
+    imageUrlExpiresAt: string;
     source: 'ai';
     stored: boolean;
     vehicle: WrapVehicleSpecs;

@@ -194,6 +194,13 @@ export function getWrapDesignRequestValidationError(payload: unknown) {
     return 'vehicleYear is required and must be a 4-digit year string.';
   }
 
+  const vehicleYear = Number(record.vehicleYear.trim());
+  const maxVehicleYear = new Date().getFullYear() + 2;
+
+  if (vehicleYear < 1900 || vehicleYear > maxVehicleYear) {
+    return `vehicleYear must be between 1900 and ${maxVehicleYear}.`;
+  }
+
   if (typeof record.vehicleMake !== 'string' || record.vehicleMake.trim().length === 0) {
     return 'vehicleMake is required.';
   }
@@ -202,7 +209,7 @@ export function getWrapDesignRequestValidationError(payload: unknown) {
     return 'vehicleModel is required.';
   }
 
-  if (typeof record.companyName !== 'string' || record.companyName.trim().length <= 1) {
+  if (typeof record.companyName !== 'string' || record.companyName.trim().length === 0) {
     return 'companyName is required.';
   }
 
