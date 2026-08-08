@@ -190,7 +190,6 @@ async function generateAiConcepts(
     prompt: imagePrompt,
     size: '1792x1024',
     quality: 'hd',
-    style: 'vivid',
     response_format: 'url',
   });
   const imageUrl = imageResponse.data?.[0]?.url?.trim();
