@@ -3,11 +3,5 @@
   "outputDirectory": ".next",
   "env": {
     "VERCEL_ENV": "production"
-  },
-  "functions": {
-    "api/**/*.ts": {
-      "maxDuration": 60,
-      "memory": 3008
-    }
   }
 }
