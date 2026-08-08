@@ -327,7 +327,7 @@ function getDisplayableImageUrl(imageResponse: {
   const imageBase64 = generatedImage?.b64_json?.trim();
 
   if (!imageBase64) {
-    return '';
+    return undefined;
   }
 
   return `data:image/png;base64,${imageBase64}`;
