@@ -41,49 +41,86 @@ function timeLabel(d: Date) {
   return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-const RATE_PER_MIN = 0.25; // $15/hr
+const RATE_PER_MIN = 0.25;
 
 const SAMPLE_SHIFTS: Shift[] = [
-  {
-    id: '1',
-    date: 'Aug 9, 2026',
-    startTime: '8:00 AM',
-    endTime: '2:30 PM',
-    durationMin: 390,
-    earnings: 97.5,
-    route: 'Downtown Loop',
-  },
-  {
-    id: '2',
-    date: 'Aug 8, 2026',
-    startTime: '10:00 AM',
-    endTime: '4:00 PM',
-    durationMin: 360,
-    earnings: 90.0,
-    route: 'Suburban North',
-  },
-  {
-    id: '3',
-    date: 'Aug 7, 2026',
-    startTime: '9:00 AM',
-    endTime: '3:00 PM',
-    durationMin: 360,
-    earnings: 90.0,
-    route: 'Highway 45',
-  },
+  { id: '1', date: 'Aug 9, 2026', startTime: '8:00 AM', endTime: '2:30 PM', durationMin: 390, earnings: 97.5, route: 'Downtown Loop' },
+  { id: '2', date: 'Aug 8, 2026', startTime: '10:00 AM', endTime: '4:00 PM', durationMin: 360, earnings: 90.0, route: 'Suburban North' },
+  { id: '3', date: 'Aug 7, 2026', startTime: '9:00 AM', endTime: '3:00 PM', durationMin: 360, earnings: 90.0, route: 'Highway 45' },
 ];
 
 const WAYPOINTS = ['Depot', 'Zone A', 'Zone B', 'Zone C', 'Zone D'];
 
-export default function DriverPortalPage() {
+function LoginScreen({ onLogin }: { onLogin: (name: string) => void }) {
+  const [codeInput, setCodeInput] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthError('');
+    if (!codeInput.trim()) { setAuthError('Please enter your access code.'); return; }
+    setAuthLoading(true);
+    try {
+      const res = await fetch('/api/driver-codes/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: codeInput.trim() }),
+      });
+      const data = await res.json() as { success: boolean; driverName?: string; error?: string };
+      if (data.success) {
+        onLogin(data.driverName ?? 'Driver');
+      } else {
+        setAuthError(data.error ?? 'Invalid access code. Please try again.');
+      }
+    } catch {
+      setAuthError('Connection error. Please try again.');
+    }
+    setAuthLoading(false);
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#0a0f1e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, sans-serif', padding: 24 }}>
+      <div style={{ background: '#0d1526', border: '1px solid #00e5ff33', borderRadius: 16, padding: 40, width: '100%', maxWidth: 400, textAlign: 'center', boxShadow: '0 0 60px #00e5ff11' }}>
+        <div style={{ fontSize: 48, marginBottom: 12 }}>🚗</div>
+        <h1 style={{ color: '#fff', fontSize: 24, fontWeight: 800, marginBottom: 6, margin: '0 0 6px' }}>Driver Portal</h1>
+        <p style={{ color: '#64748b', fontSize: 14, marginBottom: 28 }}>Enter your driver access code to continue</p>
+        <form onSubmit={(e) => void handleLogin(e)}>
+          <input
+            value={codeInput}
+            onChange={(e) => setCodeInput(e.target.value)}
+            placeholder="e.g. DRV-2026-A3K9"
+            style={{ width: '100%', background: '#0a0a1a', border: '1px solid #1e293b', borderRadius: 8, padding: '12px 14px', color: '#e2e8f0', fontSize: 15, marginBottom: 16, fontFamily: 'monospace', letterSpacing: 2, textAlign: 'center', boxSizing: 'border-box', outline: 'none' }}
+          />
+          {authError && (
+            <div style={{ background: '#ff005518', border: '1px solid #ff005544', borderRadius: 6, padding: '8px 12px', color: '#ff6b6b', fontSize: 13, marginBottom: 16 }}>
+              {authError}
+            </div>
+          )}
+          <button
+            type="submit"
+            disabled={authLoading}
+            style={{ width: '100%', background: authLoading ? '#1e293b' : 'linear-gradient(135deg,#00b4d8,#0077b6)', border: 'none', borderRadius: 8, padding: '13px', color: '#fff', fontSize: 15, fontWeight: 700, cursor: authLoading ? 'not-allowed' : 'pointer', letterSpacing: 1 }}
+          >
+            {authLoading ? 'Verifying…' : 'Enter Portal →'}
+          </button>
+        </form>
+        <p style={{ color: '#334155', fontSize: 12, marginTop: 20 }}>Need a code? Contact your administrator.</p>
+      </div>
+    </div>
+  );
+}
+
+function DriverPortalMain({ driverName, onLogout }: { driverName: string; onLogout: () => void }) {
   const [status, setStatus] = useState<Status>('idle');
   const [shiftStart, setShiftStart] = useState<Date | null>(null);
   const [breakStart, setBreakStart] = useState<Date | null>(null);
-  const [elapsed, setElapsed] = useState(0); // seconds active (excluding breaks)
-  const [breakElapsed, setBreakElapsed] = useState(0); // seconds on break
+  const [elapsed, setElapsed] = useState(0);
+  const [breakElapsed, setBreakElapsed] = useState(0);
   const [currentRoute] = useState('Downtown Loop');
   const [progress, setProgress] = useState(0);
   const [history, setHistory] = useState<Shift[]>([]);
+  const [currentTime, setCurrentTime] = useState(now());
 
   useEffect(() => {
     fetch('/api/driver-shifts')
@@ -91,29 +128,24 @@ export default function DriverPortalPage() {
       .then((json) => { if (json.success && json.data) setHistory(json.data); })
       .catch(() => setHistory(SAMPLE_SHIFTS));
   }, []);
-  const [currentTime, setCurrentTime] = useState(now());
 
-  // Clock tick
   useEffect(() => {
     const id = setInterval(() => setCurrentTime(now()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  // Shift timer
   useEffect(() => {
     if (status !== 'active') return;
     const id = setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => clearInterval(id);
   }, [status]);
 
-  // Break timer
   useEffect(() => {
     if (status !== 'break') return;
     const id = setInterval(() => setBreakElapsed((b) => b + 1), 1000);
     return () => clearInterval(id);
   }, [status]);
 
-  // Simulate route progress
   useEffect(() => {
     if (status !== 'active') return;
     const id = setInterval(() => setProgress((p) => Math.min(100, p + 0.1)), 3000);
@@ -150,8 +182,7 @@ export default function DriverPortalPage() {
   const elapsedMin = Math.floor(elapsed / 60);
   const earnings = parseFloat((elapsedMin * RATE_PER_MIN).toFixed(2));
   const weeklyTotal = history.reduce((s, sh) => s + sh.earnings, 0);
-  const estimatedPayout = parseFloat(((weeklyTotal + earnings) * 0.92).toFixed(2)); // 8% platform fee
-
+  const estimatedPayout = parseFloat(((weeklyTotal + earnings) * 0.92).toFixed(2));
   const waypointIndex = Math.min(Math.floor((progress / 100) * WAYPOINTS.length), WAYPOINTS.length - 1);
 
   const statusColors: Record<Status, string> = {
@@ -173,12 +204,20 @@ export default function DriverPortalPage() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">{todayLabel()}</p>
-              <h1 className="text-2xl font-extrabold text-white">Driver Portal</h1>
+              <h1 className="text-2xl font-extrabold text-white">Welcome, {driverName}</h1>
               <p className="text-slate-400 text-sm mt-0.5">{timeLabel(currentTime)}</p>
             </div>
-            <span className={`text-xs font-bold uppercase tracking-widest px-3 py-1.5 rounded-full ${statusColors[status]}`}>
-              {statusLabel[status]}
-            </span>
+            <div className="flex flex-col items-end gap-2">
+              <span className={`text-xs font-bold uppercase tracking-widest px-3 py-1.5 rounded-full ${statusColors[status]}`}>
+                {statusLabel[status]}
+              </span>
+              <button
+                onClick={onLogout}
+                className="text-xs text-slate-500 hover:text-slate-300 underline"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
 
@@ -201,7 +240,6 @@ export default function DriverPortalPage() {
               </div>
             </div>
 
-            {/* Route Progress */}
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-slate-400 font-semibold">{currentRoute}</p>
@@ -216,11 +254,7 @@ export default function DriverPortalPage() {
               <div className="flex justify-between">
                 {WAYPOINTS.map((wp, i) => (
                   <div key={wp} className="flex flex-col items-center gap-1">
-                    <div
-                      className={`w-2.5 h-2.5 rounded-full transition-colors ${
-                        i <= waypointIndex ? 'bg-cyan-400' : 'bg-slate-700'
-                      }`}
-                    />
+                    <div className={`w-2.5 h-2.5 rounded-full transition-colors ${i <= waypointIndex ? 'bg-cyan-400' : 'bg-slate-700'}`} />
                     <span className="text-[10px] text-slate-500">{wp}</span>
                   </div>
                 ))}
@@ -240,43 +274,20 @@ export default function DriverPortalPage() {
           <p className="text-xs text-cyan-400 uppercase tracking-widest font-bold mb-3">Shift Controls</p>
           <div className="flex flex-wrap gap-3">
             {status === 'idle' && (
-              <button
-                onClick={startShift}
-                className="flex-1 min-w-[140px] py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-sm uppercase tracking-widest shadow hover:from-cyan-400 hover:to-blue-500 transition min-h-[44px]"
-              >
+              <button onClick={startShift} className="flex-1 min-w-[140px] py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-sm uppercase tracking-widest shadow hover:from-cyan-400 hover:to-blue-500 transition min-h-[44px]">
                 Start Shift
               </button>
             )}
             {status === 'active' && (
               <>
-                <button
-                  onClick={takeBreak}
-                  className="flex-1 min-w-[120px] py-3 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-sm uppercase tracking-widest hover:bg-amber-500/30 transition min-h-[44px]"
-                >
-                  Take Break
-                </button>
-                <button
-                  onClick={endShift}
-                  className="flex-1 min-w-[120px] py-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-300 font-bold text-sm uppercase tracking-widest hover:bg-red-500/30 transition min-h-[44px]"
-                >
-                  End Shift
-                </button>
+                <button onClick={takeBreak} className="flex-1 min-w-[120px] py-3 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-sm uppercase tracking-widest hover:bg-amber-500/30 transition min-h-[44px]">Take Break</button>
+                <button onClick={endShift} className="flex-1 min-w-[120px] py-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-300 font-bold text-sm uppercase tracking-widest hover:bg-red-500/30 transition min-h-[44px]">End Shift</button>
               </>
             )}
             {status === 'break' && (
               <>
-                <button
-                  onClick={resumeShift}
-                  className="flex-1 min-w-[120px] py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-sm uppercase tracking-widest hover:from-cyan-400 hover:to-blue-500 transition min-h-[44px]"
-                >
-                  Resume Shift
-                </button>
-                <button
-                  onClick={endShift}
-                  className="flex-1 min-w-[120px] py-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-300 font-bold text-sm uppercase tracking-widest hover:bg-red-500/30 transition min-h-[44px]"
-                >
-                  End Shift
-                </button>
+                <button onClick={resumeShift} className="flex-1 min-w-[120px] py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-sm uppercase tracking-widest hover:from-cyan-400 hover:to-blue-500 transition min-h-[44px]">Resume Shift</button>
+                <button onClick={endShift} className="flex-1 min-w-[120px] py-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-300 font-bold text-sm uppercase tracking-widest hover:bg-red-500/30 transition min-h-[44px]">End Shift</button>
               </>
             )}
           </div>
@@ -306,10 +317,7 @@ export default function DriverPortalPage() {
           <p className="text-xs text-cyan-400 uppercase tracking-widest font-bold mb-3">Shift History</p>
           <div className="space-y-2">
             {history.map((shift) => (
-              <div
-                key={shift.id}
-                className="bg-slate-800 rounded-xl p-3 flex items-center justify-between gap-3"
-              >
+              <div key={shift.id} className="bg-slate-800 rounded-xl p-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-white text-sm font-semibold truncate">{shift.date}</p>
                   <p className="text-slate-500 text-xs">{shift.startTime} — {shift.endTime} · {shift.route}</p>
@@ -325,4 +333,15 @@ export default function DriverPortalPage() {
       </div>
     </main>
   );
+}
+
+export default function DriverPortalPage() {
+  const [driverName, setDriverName] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  if (!isAuthenticated) {
+    return <LoginScreen onLogin={(name) => { setDriverName(name); setIsAuthenticated(true); }} />;
+  }
+
+  return <DriverPortalMain driverName={driverName} onLogout={() => { setDriverName(''); setIsAuthenticated(false); }} />;
 }
