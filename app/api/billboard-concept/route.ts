@@ -130,47 +130,41 @@ export async function POST(req: NextRequest) {
     // Continue without image
   }
 
-  const conceptCompletion = await openai.chat.completions.create({
-    model: process.env.OPENAI_TEXT_MODEL || 'gpt-4o',
-    temperature: 0.8,
-    response_format: { type: 'json_object' },
-    messages: [
-      {
-        role: 'system',
-        content:
-          'You are a senior outdoor advertising creative strategist. Return ONLY valid JSON with keys: headline, bodyCopy, callToAction, conceptOne, conceptTwo, conceptThree.',
-      },
-      {
-        role: 'user',
-        content: [
-          `Billboard Format: ${r.formatType}`,
-          `Campaign: "${r.campaignTitle}"`,
-          `Industry: ${r.industry}`,
-          `Location: ${r.locationRegion}`,
-          `Audience: ${r.targetAudience} — ${r.targetDemographic}`,
-          `Key Message: ${r.keyMessage}`,
-          `Duration: ${r.campaignDuration}, Budget: ${r.budgetTier}`,
-          `Brief: ${r.campaignBrief}`,
-          '',
-          'Provide: a compelling headline (<8 words), body copy (<20 words), call to action (<6 words), and three distinct creative direction concepts (2-3 sentences each).',
-        ].join('\n'),
-      },
-    ],
-  });
-
-  const concepts = parseConcepts(conceptCompletion.choices?.[0]?.message?.content ?? '');
+  let concepts: ConceptPayload;
+  try {
+    const conceptCompletion = await openai.chat.completions.create({
+      model: process.env.OPENAI_TEXT_MODEL || 'gpt-4o',
+      temperature: 0.8,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a senior outdoor advertising creative strategist. Return ONLY valid JSON with keys: headline, bodyCopy, callToAction, conceptOne, conceptTwo, conceptThree.',
+        },
+        {
+          role: 'user',
+          content: [
+            `Billboard Format: ${r.formatType}`,
+            `Campaign: "${r.campaignTitle}"`,
+            `Industry: ${r.industry}`,
+            `Location: ${r.locationRegion}`,
+            `Audience: ${r.targetAudience} — ${r.targetDemographic}`,
+            `Key Message: ${r.keyMessage}`,
+            `Duration: ${r.campaignDuration}, Budget: ${r.budgetTier}`,
+            `Brief: ${r.campaignBrief}`,
+            '',
+            'Provide: a compelling headline (<8 words), body copy (<20 words), call to action (<6 words), and three distinct creative direction concepts (2-3 sentences each).',
+          ].join('\n'),
+        },
+      ],
+    });
+    concepts = parseConcepts(conceptCompletion.choices?.[0]?.message?.content ?? '');
+  } catch {
+    concepts = parseConcepts('');
+  }
 
   const result: BillboardResult = { ...concepts, imageUrl };
   return NextResponse.json({ success: true, data: result }, { status: 200 });
 }
 
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    },
-  });
-}

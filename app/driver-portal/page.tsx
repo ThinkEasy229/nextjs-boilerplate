@@ -20,6 +20,11 @@ function formatDuration(minutes: number) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+function formatDurationSec(seconds: number) {
+  if (seconds < 60) return `${seconds}s`;
+  return formatDuration(Math.floor(seconds / 60));
+}
+
 function formatCurrency(amount: number) {
   return `$${amount.toFixed(2)}`;
 }
@@ -78,7 +83,14 @@ export default function DriverPortalPage() {
   const [breakElapsed, setBreakElapsed] = useState(0); // seconds on break
   const [currentRoute] = useState('Downtown Loop');
   const [progress, setProgress] = useState(0);
-  const [history] = useState<Shift[]>(SAMPLE_SHIFTS);
+  const [history, setHistory] = useState<Shift[]>([]);
+
+  useEffect(() => {
+    fetch('/api/driver-shifts')
+      .then((r) => r.json() as Promise<{ success: boolean; data?: Shift[] }>)
+      .then((json) => { if (json.success && json.data) setHistory(json.data); })
+      .catch(() => setHistory(SAMPLE_SHIFTS));
+  }, []);
   const [currentTime, setCurrentTime] = useState(now());
 
   // Clock tick
@@ -137,8 +149,8 @@ export default function DriverPortalPage() {
 
   const elapsedMin = Math.floor(elapsed / 60);
   const earnings = parseFloat((elapsedMin * RATE_PER_MIN).toFixed(2));
-  const weeklyTotal = history.reduce((s, sh) => s + sh.earnings, 0) + earnings;
-  const estimatedPayout = parseFloat((weeklyTotal * 0.92).toFixed(2)); // 8% platform fee
+  const weeklyTotal = history.reduce((s, sh) => s + sh.earnings, 0);
+  const estimatedPayout = parseFloat(((weeklyTotal + earnings) * 0.92).toFixed(2)); // 8% platform fee
 
   const waypointIndex = Math.min(Math.floor((progress / 100) * WAYPOINTS.length), WAYPOINTS.length - 1);
 
@@ -217,7 +229,7 @@ export default function DriverPortalPage() {
 
             {status === 'break' && breakStart && (
               <div className="bg-amber-900/20 border border-amber-500/30 rounded-lg px-3 py-2 mb-4 text-amber-300 text-xs">
-                On break since {timeLabel(breakStart)} — {formatDuration(Math.floor(breakElapsed / 60))} elapsed
+                On break since {timeLabel(breakStart)} — {formatDurationSec(breakElapsed)} elapsed
               </div>
             )}
           </div>
