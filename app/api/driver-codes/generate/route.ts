@@ -14,6 +14,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'driverName and driverEmail are required' }, { status: 400 });
     }
 
+    // Basic email format validation (using indexOf to avoid ReDoS risk)
+    const atIndex = driverEmail.indexOf('@');
+    const dotIndex = driverEmail.lastIndexOf('.');
+    if (atIndex < 1 || dotIndex < atIndex + 2 || dotIndex >= driverEmail.length - 1) {
+      return NextResponse.json({ success: false, error: 'Invalid email address format' }, { status: 400 });
+    }
+
     const code = createDriverCode(driverName, driverEmail, expiresAt);
     return NextResponse.json({ success: true, data: code });
   } catch {

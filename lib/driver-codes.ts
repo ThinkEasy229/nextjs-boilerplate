@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { randomInt } from 'crypto';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const CODES_FILE = path.join(DATA_DIR, 'driver-codes.json');
@@ -44,7 +45,7 @@ function generateRandomSuffix(length: number): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let result = '';
   for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    result += chars.charAt(randomInt(chars.length));
   }
   return result;
 }
@@ -62,7 +63,7 @@ export function createDriverCode(
 ): DriverCode {
   const codes = readCodes();
   const code: DriverCode = {
-    id: `dc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id: `dc-${Date.now()}-${generateRandomSuffix(5)}`,
     code: generateCode(),
     driverName,
     driverEmail,

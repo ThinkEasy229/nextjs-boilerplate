@@ -129,7 +129,7 @@ export default function HRDashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {MOCK_DRIVERS.sort((a, b) => b.weeklyEarnings - a.weeklyEarnings).map((d) => (
+                  {[...MOCK_DRIVERS].sort((a, b) => b.weeklyEarnings - a.weeklyEarnings).map((d) => (
                     <tr key={d.id}>
                       <td style={s.td}><div style={{ fontWeight: 600 }}>{d.name}</div><div style={{ fontSize: 11, color: '#64748b' }}>{d.email}</div></td>
                       <td style={s.td}>

@@ -49,6 +49,7 @@ export default function AdminDriverCodesPage() {
       const data = await res.json() as { success: boolean; data?: DriverCode; error?: string };
       if (data.success && data.data) {
         setNewCode(data.data);
+        setCodes((prev) => [data.data!, ...prev]);
         setDriverName('');
         setDriverEmail('');
         setExpiresAt('');
@@ -63,11 +64,15 @@ export default function AdminDriverCodesPage() {
 
   async function handleDeactivate(id: string) {
     if (!confirm('Deactivate this code?')) return;
-    await fetch('/api/driver-codes/deactivate', {
+    const res = await fetch('/api/driver-codes/deactivate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     });
+    const data = await res.json() as { success: boolean };
+    if (data.success) {
+      setCodes((prev) => prev.map((c) => c.id === id ? { ...c, active: false } : c));
+    }
   }
 
   const s: Record<string, CSSProperties> = {
