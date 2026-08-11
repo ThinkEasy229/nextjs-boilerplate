@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString();
     const accessCode = autoApproved ? createDriverCode(safeName, safeEmail, null).code : null;
 
-   const now = new Date().toISOString();
+  const now = new Date().toISOString();
 
 const application: DriverApplication = {
   id: createId('application'),
