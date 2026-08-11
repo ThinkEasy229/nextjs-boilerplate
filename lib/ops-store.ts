@@ -6,6 +6,7 @@ export type UserRole = 'hr-manager' | 'hr-recruiter' | 'design-team' | 'client';
 export type EmployeeStatus = 'active' | 'inactive' | 'on-leave';
 export type PayrollStatus = 'pending' | 'paid' | 'failed';
 export type DriverApplicationStatus = 'pending' | 'approved' | 'rejected' | 'changes-requested';
+export type VerificationStatus = 'pending' | 'approved' | 'rejected';
 export type ClientInviteStatus = 'pending' | 'used' | 'expired';
 export type DesignProjectStatus = 'pending' | 'in-progress' | 'ready-for-print' | 'delivered';
 export type ClientProjectStatus =
@@ -208,7 +209,7 @@ export interface DriverApplication {
   phone: string;
   dob: string;
   address: string;
-  emergencyContact: string;
+  emergencyContact?: string;
   vehicleYear: string;
   vehicleMake: string;
   vehicleModel: string;
@@ -217,6 +218,30 @@ export interface DriverApplication {
   insurancePolicyNumber: string;
   licenseFile: string;
   insuranceFile: string;
+  licenseBackFile: string;
+  documentVerificationStatus: VerificationStatus;
+  documents: {
+    key: 'license-front' | 'license-back' | 'insurance-card' | 'background-consent';
+    label: string;
+    filePath: string | null;
+    status: VerificationStatus;
+    uploadedAt: string;
+    reviewedAt: string | null;
+    reviewedBy: string | null;
+    note?: string;
+  }[];
+  backgroundCheck: {
+    provider: string;
+    status: 'not-requested' | 'pending' | 'completed' | 'failed';
+    summary: string;
+    requestedAt: string | null;
+    completedAt: string | null;
+    reviewerId: string | null;
+    externalId: string | null;
+    retryable: boolean;
+    attempts: number;
+    lastError: string | null;
+  };
   status: DriverApplicationStatus;
   appliedDate: string;
   approvedDate: string | null;
