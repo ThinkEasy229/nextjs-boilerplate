@@ -38,7 +38,7 @@ export default function WrapLabPage() {
   const [material, setMaterial] = useState(MATERIALS[0]);
   const [placement, setPlacement] = useState(PLACEMENTS[0]);
   const [logoText, setLogoText] = useState('');
-  const [useCustomImage, setUseCustomImage] = useState(false);
+  const [imageSource, setImageSource] = useState<'ai' | 'upload'>('ai');
   const [customImageFile, setCustomImageFile] = useState<File | null>(null);
   const [customImagePreview, setCustomImagePreview] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -49,7 +49,21 @@ export default function WrapLabPage() {
   function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      setError('File size must be less than 10MB');
+      return;
+    }
+    
+    // Validate file type
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Only JPG, PNG, and WebP images are supported');
+      return;
+    }
+    
     setCustomImageFile(file);
+    setError('');
     const reader = new FileReader();
     reader.onload = (ev) => setCustomImagePreview(ev.target?.result as string);
     reader.readAsDataURL(file);
@@ -59,6 +73,11 @@ export default function WrapLabPage() {
     setError('');
     if (!companyName.trim()) {
       setError('Please enter a company name.');
+      return;
+    }
+
+    if (imageSource === 'upload' && !customImageFile) {
+      setError('Please upload an image for your wrap design.');
       return;
     }
 
@@ -87,7 +106,7 @@ export default function WrapLabPage() {
         preferredColors: `${material} finish, primary color ${colorDesc}, electric accents`,
         designDirection: designDirection,
         tagline: tagline || undefined,
-        goals: `Generate a photorealistic, print-ready ${placement.toLowerCase()} wrap mockup for a ${selectedVehicle.year} ${selectedVehicle.make} ${selectedVehicle.model}. The wrap must be precisely fitted to this exact vehicle body style. Ultra-high quality, studio lighting, dramatic angle, no text artifacts, premium advertising quality.`,
+        goals: `Generate a photorealistic, print-ready ${placement.toLowerCase()} wrap mockup for a ${selectedVehicle.year} ${selectedVehicle.make} ${selectedVehicle.model}. The wrap must be precise, vehicle-accurate, ultra-high quality, studio lighting, dramatic angle, no text artifacts, premium advertising quality.`,
       };
 
       const res = await fetch('/api/wrap-concept', {
@@ -108,12 +127,12 @@ export default function WrapLabPage() {
     }
   }
 
-  const displayImage = useCustomImage && customImagePreview ? customImagePreview : result?.imageUrl;
+  const displayImage = imageSource === 'upload' && customImagePreview ? customImagePreview : result?.imageUrl;
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0a1a', color: '#e2e8f0', fontFamily: 'system-ui, sans-serif' }}>
       {/* Top Header */}
-      <header style={{ background: 'rgba(10,10,26,0.95)', borderBottom: '1px solid #00e5ff33', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
+      <header style={{ background: 'rgba(10,10,26,0.95)', borderBottom: '1px solid #00e5ff33', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Link href="/" style={{ color: '#00e5ff', textDecoration: 'none', fontSize: 13, opacity: 0.7 }}>← Home</Link>
           <span style={{ color: '#334155', fontSize: 18 }}>|</span>
@@ -158,22 +177,22 @@ export default function WrapLabPage() {
           <div style={{ padding: '0 16px 12px', fontSize: 10, color: '#ff6600', letterSpacing: 2, fontWeight: 700, textTransform: 'uppercase' }}>Tools</div>
           <button
             onClick={() => setResult(null)}
-            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '8px 16px', textAlign: 'left', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}
+            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '8px 16px', textAlign: 'left', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.15s' }}
           >
             🔄 Reset Design
           </button>
           <button
             onClick={() => { if (result?.imageUrl) { window.open(result.imageUrl, '_blank'); } }}
-            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '8px 16px', textAlign: 'left', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}
+            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '8px 16px', textAlign: 'left', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.15s' }}
           >
             💾 Save Mockup
           </button>
         </aside>
 
         {/* CENTER HERO PREVIEW */}
-        <main style={{ background: 'radial-gradient(ellipse at center, #0f172a 0%, #0a0a1a 70%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, position: 'relative', overflow: 'hidden' }}>
+        <main style={{ background: 'radial-gradient(ellipse at center, #0f172a 0%, #0a0a1a 70%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px', position: 'relative', overflow: 'hidden' }}>
           {/* Neon grid lines background */}
-          <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(#00e5ff08 1px, transparent 1px), linear-gradient(90deg, #00e5ff08 1px, transparent 1px)', backgroundSize: '40px 40px', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(#00e5ff08 1px, transparent 1px), linear-gradient(90deg, #00e5ff08 1px, transparent 1px)', backgroundSize: '50px 50px', pointerEvents: 'none', opacity: 0.5 }} />
 
           {/* Vehicle name */}
           <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginBottom: 16 }}>
@@ -185,7 +204,7 @@ export default function WrapLabPage() {
           </div>
 
           {/* Hero image area */}
-          <div style={{ position: 'relative', zIndex: 2, width: '100%', maxWidth: 700, aspectRatio: '16/9', borderRadius: 16, overflow: 'hidden', border: '1px solid #00e5ff33', boxShadow: '0 0 60px #00e5ff22, inset 0 0 40px #00000088', background: '#0d1526', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'relative', zIndex: 2, width: '100%', maxWidth: 700, aspectRatio: '16/9', borderRadius: 16, overflow: 'hidden', border: '1px solid #00e5ff33', boxShadow: '0 0 60px #00e5ff44', marginBottom: 20 }}>
             {displayImage ? (
               <Image
                 src={displayImage}
@@ -233,7 +252,7 @@ export default function WrapLabPage() {
           )}
 
           {error && (
-            <div style={{ position: 'relative', zIndex: 2, marginTop: 16, background: '#ff005522', border: '1px solid #ff0055', borderRadius: 8, padding: '10px 16px', color: '#ff6b6b', fontSize: 14, maxWidth: 700, width: '100%' }}>
+            <div style={{ position: 'relative', zIndex: 2, marginTop: 16, background: '#ff005522', border: '1px solid #ff0055', borderRadius: 8, padding: '10px 16px', color: '#ff6b6b', fontSize: 13 }}>
               {error}
             </div>
           )}
@@ -274,7 +293,7 @@ export default function WrapLabPage() {
                   key={c}
                   onClick={() => setSelectedColor(c)}
                   title={c}
-                  style={{ width: '100%', aspectRatio: '1', background: c, borderRadius: 6, border: selectedColor === c ? '2px solid #fff' : '2px solid transparent', cursor: 'pointer', transition: 'transform 0.1s', boxShadow: selectedColor === c ? `0 0 10px ${c}` : 'none' }}
+                  style={{ width: '100%', aspectRatio: '1', background: c, borderRadius: 6, border: selectedColor === c ? '2px solid #fff' : '2px solid transparent', cursor: 'pointer', transition: 'all 0.15s' }}
                 />
               ))}
             </div>
@@ -297,7 +316,7 @@ export default function WrapLabPage() {
                 <button
                   key={m}
                   onClick={() => setMaterial(m)}
-                  style={{ background: material === m ? '#00e5ff22' : '#0a0a1a', border: `1px solid ${material === m ? '#00e5ff' : '#1e293b'}`, color: material === m ? '#00e5ff' : '#64748b', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: material === m ? 700 : 400 }}
+                  style={{ background: material === m ? '#00e5ff22' : '#0a0a1a', border: `1px solid ${material === m ? '#00e5ff' : '#1e293b'}`, color: material === m ? '#00e5ff' : '#64748b', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer', transition: 'all 0.15s' }}
                 >
                   {m}
                 </button>
@@ -313,7 +332,7 @@ export default function WrapLabPage() {
                 <button
                   key={p}
                   onClick={() => setPlacement(p)}
-                  style={{ background: placement === p ? '#00e5ff22' : '#0a0a1a', border: `1px solid ${placement === p ? '#00e5ff' : '#1e293b'}`, color: placement === p ? '#00e5ff' : '#64748b', borderRadius: 6, padding: '7px 12px', fontSize: 12, cursor: 'pointer', textAlign: 'left', fontWeight: placement === p ? 700 : 400 }}
+                  style={{ background: placement === p ? '#00e5ff22' : '#0a0a1a', border: `1px solid ${placement === p ? '#00e5ff' : '#1e293b'}`, color: placement === p ? '#00e5ff' : '#64748b', borderRadius: 6, padding: '8px 12px', fontSize: 12, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}
                 >
                   {placement === p ? '✓ ' : ''}{p}
                 </button>
@@ -332,38 +351,79 @@ export default function WrapLabPage() {
             />
           </section>
 
-          {/* Image Mode */}
+          {/* Image Source Selection - OPTION A: Always Visible */}
           <section>
-            <div style={{ fontSize: 10, color: '#00e5ff', letterSpacing: 2, fontWeight: 700, textTransform: 'uppercase', marginBottom: 10 }}>Wrap Image Source</div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              <button
-                onClick={() => setUseCustomImage(false)}
-                style={{ flex: 1, background: !useCustomImage ? '#00e5ff22' : '#0a0a1a', border: `1px solid ${!useCustomImage ? '#00e5ff' : '#1e293b'}`, color: !useCustomImage ? '#00e5ff' : '#64748b', borderRadius: 6, padding: '7px 8px', fontSize: 12, cursor: 'pointer', fontWeight: !useCustomImage ? 700 : 400 }}
-              >
-                🤖 AI Generate
-              </button>
-              <button
-                onClick={() => setUseCustomImage(true)}
-                style={{ flex: 1, background: useCustomImage ? '#ff660022' : '#0a0a1a', border: `1px solid ${useCustomImage ? '#ff6600' : '#1e293b'}`, color: useCustomImage ? '#ff6600' : '#64748b', borderRadius: 6, padding: '7px 8px', fontSize: 12, cursor: 'pointer', fontWeight: useCustomImage ? 700 : 400 }}
-              >
-                📁 Upload
-              </button>
+            <div style={{ fontSize: 10, color: '#00e5ff', letterSpacing: 2, fontWeight: 700, textTransform: 'uppercase', marginBottom: 12 }}>Image Source</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              
+              {/* AI Generate Option */}
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px', borderRadius: 8, background: imageSource === 'ai' ? '#00e5ff11' : 'transparent', border: `1px solid ${imageSource === 'ai' ? '#00e5ff33' : '#1e293b'}`, transition: 'all 0.15s' }}>
+                <input
+                  type="radio"
+                  name="imageSource"
+                  value="ai"
+                  checked={imageSource === 'ai'}
+                  onChange={() => setImageSource('ai')}
+                  style={{ marginTop: 2, cursor: 'pointer', width: 16, height: 16 }}
+                />
+                <div>
+                  <div style={{ fontSize: 13, color: imageSource === 'ai' ? '#00e5ff' : '#e2e8f0', fontWeight: 700 }}>🤖 AI Generate</div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Create mockup from your design specs</div>
+                </div>
+              </label>
+
+              {/* Upload Option */}
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px', borderRadius: 8, background: imageSource === 'upload' ? '#ff660011' : 'transparent', border: `1px solid ${imageSource === 'upload' ? '#ff660033' : '#1e293b'}`, transition: 'all 0.15s' }}>
+                <input
+                  type="radio"
+                  name="imageSource"
+                  value="upload"
+                  checked={imageSource === 'upload'}
+                  onChange={() => setImageSource('upload')}
+                  style={{ marginTop: 2, cursor: 'pointer', width: 16, height: 16 }}
+                />
+                <div>
+                  <div style={{ fontSize: 13, color: imageSource === 'upload' ? '#ff6600' : '#e2e8f0', fontWeight: 700 }}>📁 Upload Custom Image</div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Use your own wrap design or concept</div>
+                </div>
+              </label>
             </div>
-            {useCustomImage && (
-              <div>
+
+            {/* File Upload Input - Shown when Upload is Selected */}
+            {imageSource === 'upload' && (
+              <div style={{ marginTop: 12 }}>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   onChange={handleImageUpload}
                   style={{ display: 'none' }}
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  style={{ width: '100%', background: '#0a0a1a', border: '2px dashed #ff660044', borderRadius: 8, padding: '12px', color: '#ff6600', fontSize: 13, cursor: 'pointer', textAlign: 'center' }}
+                  style={{
+                    width: '100%',
+                    background: '#0a0a1a',
+                    border: '2px dashed #ff660044',
+                    borderRadius: 8,
+                    padding: '12px',
+                    color: '#ff6600',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    fontWeight: 600,
+                    transition: 'all 0.15s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#ff6600'; e.currentTarget.style.background = '#ff660011'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#ff660044'; e.currentTarget.style.background = '#0a0a1a'; }}
                 >
-                  {customImageFile ? `✓ ${customImageFile.name}` : 'Click to upload wrap image'}
+                  {customImageFile ? `✓ ${customImageFile.name}` : '↑ Click to upload image'}
                 </button>
+                <div style={{ fontSize: 10, color: '#64748b', marginTop: 6, textAlign: 'center' }}>JPG, PNG, or WebP (max 10MB)</div>
               </div>
             )}
           </section>
