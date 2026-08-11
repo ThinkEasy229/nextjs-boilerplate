@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
         role: body.role ?? 'Driver',
         status: 'active',
         joinDate: new Date().toISOString(),
-        emergencyContact: application.emergencyContact,
+        emergencyContact: application.emergencyContact ?? '',
         sourceApplicationId: application.id,
         documents: [],
         shiftAssignments: [],
