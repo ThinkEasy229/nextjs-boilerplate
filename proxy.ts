@@ -1,7 +1,15 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { SESSION_COOKIE, type SessionRole, verifySessionToken } from '@/lib/ops-session';
 
-const PUBLIC_PATHS = new Set(['/hr-operations', '/design-studio', '/client-onboard', '/client-onboard/register']);
+const PUBLIC_PATHS = new Set([
+  '/hr-operations',
+  '/design-studio',
+  '/client-onboard',
+  '/client-onboard/register',
+  '/driver-onboard',
+  '/driver-onboard/status',
+  '/wrap-lab',
+]);
 
 function getAllowedRoles(pathname: string): readonly SessionRole[] | null {
   if (pathname.startsWith('/admin/settings')) {
@@ -57,8 +65,9 @@ export const config = {
   matcher: [
     '/hr-operations/:path*',
     '/design-studio/:path*',
-    '/client-onboard/projects/:path*',
+    '/client-onboard/:path*',
     '/admin/driver-codes/:path*',
     '/admin/settings/:path*',
+    '/driver-onboard/:path*',
   ],
 };
