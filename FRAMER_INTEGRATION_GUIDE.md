@@ -2,6 +2,7 @@
 
 **Date**: August 11, 2026  
 **Status**: All portals live and deployed  
+**Production URL**: `https://nextjs-boilerplate-wrap-lab.vercel.app`  
 **Build Summary**: PR #12 + PR #13 merged to `wrap-lab-pro` branch
 
 ---
@@ -14,7 +15,7 @@ Two major builds are now live:
 2. **PR #13** — Complete operations ecosystem (HR, Design, Client, Driver portals)
 
 **Your Action Items**:
-- Update main navigation to link to new portals
+- Update main navigation to link to new portals (use production URLs below)
 - No code changes needed (all routes are Next.js pages)
 - Optionally embed portals in Framer via iframe
 
@@ -22,14 +23,14 @@ Two major builds are now live:
 
 ## 🔗 **New Routes to Add to Navigation**
 
-| Route | Purpose | Access | Link Name |
-|-------|---------|--------|-----------|
-| `/wrap-lab` | AI vehicle wrap configurator | Public | "Design Your Wrap" |
-| `/admin/driver-codes` | Driver code management (HR only) | Admin | "Driver Codes" |
-| `/hr-operations` | HR operations portal (2-person team) | HR Manager/Recruiter | "HR Operations" |
-| `/design-studio` | Design team project management | Design Team | "Design Studio" |
-| `/client-onboard` | Client project portal | Clients (invite-only) | "Client Portal" |
-| `/driver-onboard` | Driver application form | Public | "Apply to Drive" |
+| Route | Full URL | Purpose | Access | Link Name |
+|-------|----------|---------|--------|-----------|
+| `/wrap-lab` | `https://nextjs-boilerplate-wrap-lab.vercel.app/wrap-lab` | AI vehicle wrap configurator | Public | "Design Your Wrap" |
+| `/admin/driver-codes` | `https://nextjs-boilerplate-wrap-lab.vercel.app/admin/driver-codes` | Driver code management (HR only) | Admin | "Driver Codes" |
+| `/hr-operations` | `https://nextjs-boilerplate-wrap-lab.vercel.app/hr-operations` | HR operations portal (2-person team) | HR Manager/Recruiter | "HR Operations" |
+| `/design-studio` | `https://nextjs-boilerplate-wrap-lab.vercel.app/design-studio` | Design team project management | Design Team | "Design Studio" |
+| `/client-onboard` | `https://nextjs-boilerplate-wrap-lab.vercel.app/client-onboard` | Client project portal | Clients (invite-only) | "Client Portal" |
+| `/driver-onboard` | `https://nextjs-boilerplate-wrap-lab.vercel.app/driver-onboard` | Driver application form | Public | "Apply to Drive" |
 
 ---
 
@@ -39,18 +40,18 @@ Two major builds are now live:
 ```
 - Home
 - Services
-- [NEW] Design Your Wrap (/wrap-lab)
-- [NEW] Apply to Drive (/driver-onboard)
-- Client Portal (/client-onboard)
+- [NEW] Design Your Wrap (https://nextjs-boilerplate-wrap-lab.vercel.app/wrap-lab)
+- [NEW] Apply to Drive (https://nextjs-boilerplate-wrap-lab.vercel.app/driver-onboard)
+- Client Portal (https://nextjs-boilerplate-wrap-lab.vercel.app/client-onboard)
 - Contact
 ```
 
 ### **Admin/Staff Menu** (Logged In, Top-Right or Sidebar)
 ```
 - Dashboard
-- [NEW] HR Operations (/hr-operations)
-- [NEW] Design Studio (/design-studio)
-- [NEW] Driver Codes (/admin/driver-codes)
+- [NEW] HR Operations (https://nextjs-boilerplate-wrap-lab.vercel.app/hr-operations)
+- [NEW] Design Studio (https://nextjs-boilerplate-wrap-lab.vercel.app/design-studio)
+- [NEW] Driver Codes (https://nextjs-boilerplate-wrap-lab.vercel.app/admin/driver-codes)
 - Settings
 - Logout
 ```
@@ -127,6 +128,8 @@ Two major builds are now live:
 ### **4 New Portals** (All Live)
 
 #### **1. HR Operations** (`/hr-operations`)
+**URL**: `https://nextjs-boilerplate-wrap-lab.vercel.app/hr-operations`
+
 - Full employee records (create, edit, status changes)
 - Document management (upload all types, checklist, archive)
 - Payroll generation (weekly/monthly, 15% fee calc, CSV export)
@@ -135,6 +138,8 @@ Two major builds are now live:
 - **Access**: Role-based (HR Manager full, HR Recruiter limited)
 
 #### **2. Design Studio** (`/design-studio`)
+**URL**: `https://nextjs-boilerplate-wrap-lab.vercel.app/design-studio`
+
 - Project dashboard with status workflow
 - Vehicle specs management
 - Versioned design file uploads
@@ -143,6 +148,8 @@ Two major builds are now live:
 - **Access**: Design team only
 
 #### **3. Client Onboarding** (`/client-onboard`)
+**URL**: `https://nextjs-boilerplate-wrap-lab.vercel.app/client-onboard`
+
 - Invite-only registration system
 - Client login + project dashboard
 - Project submission creates design project automatically
@@ -151,6 +158,8 @@ Two major builds are now live:
 - **Access**: Clients with invite codes
 
 #### **4. Enhanced Driver Onboarding** (`/driver-onboard`)
+**URL**: `https://nextjs-boilerplate-wrap-lab.vercel.app/driver-onboard`
+
 - Multi-step application form
 - License + insurance file uploads
 - HR approval workflow
@@ -215,11 +224,11 @@ All data stored in **JSON files** (no database):
 
 ### **Priority 1: Update Navigation** (5 mins)
 Add links to:
-- `/wrap-lab` (public, no auth)
-- `/driver-onboard` (public, no auth)
-- `/hr-operations` (admin menu, HR team)
-- `/design-studio` (admin menu, design team)
-- `/client-onboard` (client portal login)
+- `https://nextjs-boilerplate-wrap-lab.vercel.app/wrap-lab` (public, no auth)
+- `https://nextjs-boilerplate-wrap-lab.vercel.app/driver-onboard` (public, no auth)
+- `https://nextjs-boilerplate-wrap-lab.vercel.app/hr-operations` (admin menu, HR team)
+- `https://nextjs-boilerplate-wrap-lab.vercel.app/design-studio` (admin menu, design team)
+- `https://nextjs-boilerplate-wrap-lab.vercel.app/client-onboard` (client portal login)
 
 ### **Priority 2: Optional Embeds** (If needed)
 - Embed `/wrap-lab` in Framer as iframe (public showcase)
@@ -309,18 +318,20 @@ Share these with your teams:
    - Step-by-step workflows for each portal
    - Data files & backups
    - Team member onboarding
+   - Link: `https://github.com/ThinkEasy229/nextjs-boilerplate/blob/wrap-lab-pro/SETUP.md`
 
 2. **This guide** — Framer integration guide
    - Navigation updates
    - Route references
    - No-change reminders
+   - Link: `https://github.com/ThinkEasy229/nextjs-boilerplate/blob/wrap-lab-pro/FRAMER_INTEGRATION_GUIDE.md`
 
 ---
 
 ## 🚀 **Deployment Checklist**
 
-- [ ] PR #12 + PR #13 merged ✅
-- [ ] Code deployed to production ✅
+- [x] PR #12 + PR #13 merged
+- [x] Code deployed to production
 - [ ] Navigation updated in Framer
 - [ ] New routes tested in browser
 - [ ] Teams provided with SETUP.md
@@ -357,8 +368,9 @@ Share these with your teams:
 
 ## 📞 **Questions?**
 
-**For Navigation Updates**: Framer team
-**For Portal Workflows**: Your HR/Design teams (use SETUP.md)
-**For API/Integration Issues**: Backend support (GitHub issues)
+**For Navigation Updates**: Framer team  
+**For Portal Workflows**: Your HR/Design teams (use SETUP.md)  
+**For API/Integration Issues**: Backend support (GitHub issues)  
 
+**Production URL**: `https://nextjs-boilerplate-wrap-lab.vercel.app`  
 **Everything is production-ready!** 🚀
