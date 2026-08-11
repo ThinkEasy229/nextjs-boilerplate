@@ -4,37 +4,65 @@ import { useState, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 
-const VEHICLES = [
-  { id: 'cargo-van', label: 'Cargo Van', make: 'Ford', model: 'Transit', year: '2024', emoji: '🚐' },
-  { id: 'box-truck', label: 'Box Truck', make: 'Isuzu', model: 'NPR', year: '2024', emoji: '🚛' },
-  { id: 'company-car', label: 'Company Car', make: 'Toyota', model: 'Camry', year: '2024', emoji: '🚗' },
-  { id: 'transit-bus', label: 'Transit Bus', make: 'Blue Bird', model: 'All American', year: '2024', emoji: '🚌' },
-  { id: 'semi-truck', label: 'Semi Truck', make: 'Freightliner', model: 'Cascadia', year: '2024', emoji: '🚚' },
-  { id: 'pickup-truck', label: 'Pickup Truck', make: 'Chevrolet', model: 'Silverado', year: '2024', emoji: '🛻' },
-  { id: 'ferrari', label: 'Ferrari', make: 'Ferrari', model: '488 GTB', year: '2024', emoji: '🏎️' },
-  { id: 'lamborghini', label: 'Lamborghini', make: 'Lamborghini', model: 'Huracán', year: '2024', emoji: '🏎️' },
-  { id: 'tesla', label: 'Tesla Model S', make: 'Tesla', model: 'Model S', year: '2024', emoji: '⚡' },
-];
+// ─── Vehicle class definitions ────────────────────────────────────────────────
+type VehicleClass = 'regular' | 'luxury';
 
+const VEHICLE_CLASS_CONFIG: Record<VehicleClass, {
+  label: string;
+  emoji: string;
+  tagline: string;
+  accentColor: string;
+  vehicle: { id: string; label: string; make: string; model: string; year: string; emoji: string };
+  pricing: { basePrice: number; perSqFt: number; driverPayMultiplier: number };
+}> = {
+  regular: {
+    label: 'Regular Vehicle',
+    emoji: '🚐',
+    tagline: 'Cargo Vans · Box Trucks · Fleet Vehicles',
+    accentColor: '#00e5ff',
+    vehicle: { id: 'cargo-van', label: 'Cargo Van', make: 'Ford', model: 'Transit', year: '2024', emoji: '🚐' },
+    pricing: { basePrice: 1200, perSqFt: 8, driverPayMultiplier: 1.0 },
+  },
+  luxury: {
+    label: 'Luxury Vehicle',
+    emoji: '🏎️',
+    tagline: 'Exotic Sports Cars · Premium Sedans',
+    accentColor: '#f59e0b',
+    vehicle: { id: 'ferrari', label: 'Ferrari', make: 'Ferrari', model: '488 GTB', year: '2024', emoji: '🏎️' },
+    pricing: { basePrice: 3500, perSqFt: 22, driverPayMultiplier: 1.75 },
+  },
+};
+
+const PLACEMENT_SQ_FT: Record<string, number> = {
+  'Full Wrap': 200,
+  '2-Door Wrap': 80,
+  'Partial Wrap': 100,
+  'Hood Only': 25,
+  'Roof Only': 30,
+};
+
+function calcPrice(vehicleClass: VehicleClass, placement: string): number {
+  const cfg = VEHICLE_CLASS_CONFIG[vehicleClass].pricing;
+  const sqFt = PLACEMENT_SQ_FT[placement] ?? 100;
+  return cfg.basePrice + sqFt * cfg.perSqFt;
+}
+
+// ─── Static options ───────────────────────────────────────────────────────────
 const MATERIALS = ['Gloss', 'Matte', 'Chrome', 'Satin', 'Metallic'];
 const PLACEMENTS = ['Full Wrap', '2-Door Wrap', 'Partial Wrap', 'Hood Only', 'Roof Only'];
-const WRAP_COLORS = [
-  '#00e5ff', '#ff6600', '#1a1a2e', '#ffffff', '#ff0055',
-  '#00ff88', '#7c3aed', '#fbbf24', '#0ea5e9', '#f43f5e',
-];
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface WrapResult {
   imageUrl: string;
   creativeDirections: [string, string, string];
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
 export default function WrapLabPage() {
-  const [selectedVehicle, setSelectedVehicle] = useState(VEHICLES[0]);
+  const [vehicleClass, setVehicleClass] = useState<VehicleClass>('regular');
   const [companyName, setCompanyName] = useState('');
   const [industry, setIndustry] = useState('');
   const [tagline, setTagline] = useState('');
-  const [selectedColor, setSelectedColor] = useState(WRAP_COLORS[0]);
-  const [customColor, setCustomColor] = useState('#00e5ff');
   const [material, setMaterial] = useState(MATERIALS[0]);
   const [placement, setPlacement] = useState(PLACEMENTS[0]);
   const [logoText, setLogoText] = useState('');
@@ -46,22 +74,27 @@ export default function WrapLabPage() {
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const classCfg = VEHICLE_CLASS_CONFIG[vehicleClass];
+  const selectedVehicle = classCfg.vehicle;
+  const accent = classCfg.accentColor;
+  const estimatedPrice = calcPrice(vehicleClass, placement);
+
+  function handleClassChange(cls: VehicleClass) {
+    setVehicleClass(cls);
+    setResult(null);
+  }
+
   function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    
-    // Validate file size (10MB max)
     if (file.size > 10 * 1024 * 1024) {
       setError('File size must be less than 10MB');
       return;
     }
-    
-    // Validate file type
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       setError('Only JPG, PNG, and WebP images are supported');
       return;
     }
-    
     setCustomImageFile(file);
     setError('');
     const reader = new FileReader();
@@ -75,24 +108,21 @@ export default function WrapLabPage() {
       setError('Please enter a company name.');
       return;
     }
-
     if (imageSource === 'upload' && !customImageFile) {
       setError('Please upload an image for your wrap design.');
       return;
     }
-
     setIsGenerating(true);
     try {
-      // Build enhanced prompt for this specific vehicle
-      const colorDesc = `${material.toLowerCase()} ${selectedColor === customColor ? customColor : selectedColor}`;
       const designDirection = [
         `Elite ${material.toLowerCase()} vehicle wrap for a ${selectedVehicle.year} ${selectedVehicle.make} ${selectedVehicle.model}`,
         `${placement.toLowerCase()} coverage`,
-        `Primary color: ${colorDesc}`,
+        `Material finish: ${material}`,
         logoText ? `Feature branding text: "${logoText}"` : '',
         `Company: ${companyName}`,
         industry ? `Industry: ${industry}` : '',
         tagline ? `Tagline: "${tagline}"` : '',
+        `Vehicle class: ${classCfg.label}`,
       ].filter(Boolean).join('. ');
 
       const body = {
@@ -103,10 +133,13 @@ export default function WrapLabPage() {
         companyName: companyName || 'Think Easy Agency',
         contactEmail: 'info@thinkeasy.agency',
         industry: industry || 'Professional Services',
-        preferredColors: `${material} finish, primary color ${colorDesc}, electric accents`,
-        designDirection: designDirection,
+        preferredColors: `${material} finish, electric accents`,
+        designDirection,
         tagline: tagline || undefined,
         goals: `Generate a photorealistic, print-ready ${placement.toLowerCase()} wrap mockup for a ${selectedVehicle.year} ${selectedVehicle.make} ${selectedVehicle.model}. The wrap must be precise, vehicle-accurate, ultra-high quality, studio lighting, dramatic angle, no text artifacts, premium advertising quality.`,
+        vehicleClass,
+        estimatedPrice,
+        driverPayMultiplier: classCfg.pricing.driverPayMultiplier,
       };
 
       const res = await fetch('/api/wrap-concept', {
@@ -130,81 +163,86 @@ export default function WrapLabPage() {
   const displayImage = imageSource === 'upload' && customImagePreview ? customImagePreview : result?.imageUrl;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0a1a', color: '#e2e8f0', fontFamily: 'system-ui, sans-serif' }}>
-      {/* Top Header */}
-      <header style={{ background: 'rgba(10,10,26,0.95)', borderBottom: '1px solid #00e5ff33', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Link href="/" style={{ color: '#00e5ff', textDecoration: 'none', fontSize: 13, opacity: 0.7 }}>← Home</Link>
-          <span style={{ color: '#334155', fontSize: 18 }}>|</span>
-          <span style={{ color: '#00e5ff', fontWeight: 800, fontSize: 20, letterSpacing: 2, textTransform: 'uppercase', textShadow: '0 0 20px #00e5ff88' }}>🏎 Wrap Lab</span>
-          <span style={{ background: '#00e5ff22', color: '#00e5ff', fontSize: 10, padding: '2px 8px', borderRadius: 4, letterSpacing: 1 }}>GARAGE v2</span>
+    <div style={{ minHeight: '100vh', background: '#080810', color: '#e2e8f0', fontFamily: "'Inter', system-ui, sans-serif" }}>
+
+      {/* ── Header ── */}
+      <header style={{ background: 'rgba(8,8,16,0.97)', borderBottom: `1px solid ${accent}33`, padding: '14px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100, backdropFilter: 'blur(8px)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <Link href="/" style={{ color: accent, textDecoration: 'none', fontSize: 12, opacity: 0.65, letterSpacing: 1 }}>← HOME</Link>
+          <span style={{ color: '#1e293b', fontSize: 20 }}>|</span>
+          <span style={{ color: accent, fontWeight: 900, fontSize: 22, letterSpacing: 3, textTransform: 'uppercase', textShadow: `0 0 24px ${accent}88` }}>🏎 Wrap Lab</span>
+          <span style={{ background: `${accent}22`, color: accent, fontSize: 9, padding: '2px 8px', borderRadius: 4, letterSpacing: 2, fontWeight: 700 }}>PRO</span>
         </div>
-        <div style={{ fontSize: 12, color: '#64748b' }}>Select your vehicle · Customize · Generate</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 10, color: '#475569', letterSpacing: 2, textTransform: 'uppercase' }}>Est. Price</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: accent, letterSpacing: 1 }}>${estimatedPrice.toLocaleString()}</div>
+          </div>
+        </div>
       </header>
 
-      {/* Main layout: sidebar | hero | right panel */}
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr 300px', minHeight: 'calc(100vh - 57px - 160px)', gap: 0 }}>
+      {/* ── Vehicle Class Mode ── */}
+      <div style={{ background: '#0b0b18', borderBottom: '1px solid #ffffff0a', padding: '20px 28px' }}>
+        <div style={{ fontSize: 10, color: '#475569', letterSpacing: 3, textTransform: 'uppercase', marginBottom: 14, fontWeight: 700 }}>Select Vehicle Class</div>
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          {(Object.entries(VEHICLE_CLASS_CONFIG) as [VehicleClass, typeof VEHICLE_CLASS_CONFIG[VehicleClass]][]).map(([cls, cfg]) => {
+            const isActive = vehicleClass === cls;
+            return (
+              <button
+                key={cls}
+                onClick={() => handleClassChange(cls)}
+                style={{
+                  flex: '1 1 200px',
+                  maxWidth: 280,
+                  background: isActive ? `linear-gradient(135deg, ${cfg.accentColor}18, ${cfg.accentColor}08)` : '#0d0d1f',
+                  border: `2px solid ${isActive ? cfg.accentColor : '#1e293b'}`,
+                  borderRadius: 14,
+                  padding: '18px 22px',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'all 0.2s',
+                  boxShadow: isActive ? `0 0 30px ${cfg.accentColor}33` : 'none',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                  <span style={{ fontSize: 28 }}>{cfg.emoji}</span>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: isActive ? cfg.accentColor : '#94a3b8', letterSpacing: 0.5 }}>{cfg.label}</span>
+                  {isActive && <span style={{ marginLeft: 'auto', background: cfg.accentColor, color: '#000', fontSize: 9, fontWeight: 900, padding: '2px 8px', borderRadius: 4, letterSpacing: 1 }}>ACTIVE</span>}
+                </div>
+                <div style={{ fontSize: 12, color: '#475569' }}>{cfg.tagline}</div>
+                <div style={{ marginTop: 10, fontSize: 13, color: isActive ? cfg.accentColor : '#64748b', fontWeight: 700 }}>
+                  From ${cfg.pricing.basePrice.toLocaleString()}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-        {/* LEFT SIDEBAR */}
-        <aside style={{ background: '#0d0d1f', borderRight: '1px solid #00e5ff22', padding: '20px 0', display: 'flex', flexDirection: 'column', gap: 0 }}>
-          <div style={{ padding: '0 16px 12px', fontSize: 10, color: '#00e5ff', letterSpacing: 2, fontWeight: 700, textTransform: 'uppercase' }}>Vehicle Type</div>
-          {VEHICLES.map((v) => (
-            <button
-              key={v.id}
-              onClick={() => { setSelectedVehicle(v); setResult(null); }}
-              style={{
-                background: selectedVehicle.id === v.id ? 'linear-gradient(90deg,#00e5ff18,transparent)' : 'transparent',
-                border: 'none',
-                borderLeft: selectedVehicle.id === v.id ? '3px solid #00e5ff' : '3px solid transparent',
-                color: selectedVehicle.id === v.id ? '#00e5ff' : '#94a3b8',
-                cursor: 'pointer',
-                padding: '10px 16px',
-                textAlign: 'left',
-                fontSize: 13,
-                fontWeight: selectedVehicle.id === v.id ? 700 : 400,
-                transition: 'all 0.15s',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              <span style={{ fontSize: 18 }}>{v.emoji}</span>
-              <span>{v.label}</span>
-            </button>
-          ))}
+      {/* ── Main layout: hero | right panel ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', minHeight: 'calc(100vh - 200px)', gap: 0 }}>
 
-          <div style={{ borderTop: '1px solid #00e5ff22', margin: '12px 0' }} />
-          <div style={{ padding: '0 16px 12px', fontSize: 10, color: '#ff6600', letterSpacing: 2, fontWeight: 700, textTransform: 'uppercase' }}>Tools</div>
-          <button
-            onClick={() => setResult(null)}
-            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '8px 16px', textAlign: 'left', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.15s' }}
-          >
-            🔄 Reset Design
-          </button>
-          <button
-            onClick={() => { if (result?.imageUrl) { window.open(result.imageUrl, '_blank'); } }}
-            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '8px 16px', textAlign: 'left', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.15s' }}
-          >
-            💾 Save Mockup
-          </button>
-        </aside>
+        {/* ── CENTER HERO PREVIEW ── */}
+        <main style={{ background: 'radial-gradient(ellipse at center, #0f172a 0%, #080810 70%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '36px 28px', position: 'relative', overflow: 'hidden' }}>
+          {/* Grid background */}
+          <div style={{ position: 'absolute', inset: 0, backgroundImage: `linear-gradient(${accent}08 1px, transparent 1px), linear-gradient(90deg, ${accent}08 1px, transparent 1px)`, backgroundSize: '60px 60px', pointerEvents: 'none' }} />
+          {/* Glow orb */}
+          <div style={{ position: 'absolute', top: '40%', left: '50%', transform: 'translate(-50%,-50%)', width: 600, height: 400, background: `radial-gradient(ellipse, ${accent}0a 0%, transparent 70%)`, pointerEvents: 'none' }} />
 
-        {/* CENTER HERO PREVIEW */}
-        <main style={{ background: 'radial-gradient(ellipse at center, #0f172a 0%, #0a0a1a 70%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px', position: 'relative', overflow: 'hidden' }}>
-          {/* Neon grid lines background */}
-          <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(#00e5ff08 1px, transparent 1px), linear-gradient(90deg, #00e5ff08 1px, transparent 1px)', backgroundSize: '50px 50px', pointerEvents: 'none', opacity: 0.5 }} />
-
-          {/* Vehicle name */}
-          <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginBottom: 16 }}>
-            <div style={{ fontSize: 11, color: '#00e5ff', letterSpacing: 4, textTransform: 'uppercase', marginBottom: 4 }}>Selected Vehicle</div>
-            <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0, color: '#fff', textShadow: '0 0 30px #00e5ff44', letterSpacing: 1 }}>
+          {/* Vehicle badge */}
+          <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginBottom: 24 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: `${accent}11`, border: `1px solid ${accent}33`, borderRadius: 30, padding: '6px 18px', marginBottom: 14 }}>
+              <span style={{ fontSize: 16 }}>{selectedVehicle.emoji}</span>
+              <span style={{ fontSize: 11, color: accent, letterSpacing: 3, textTransform: 'uppercase', fontWeight: 700 }}>{classCfg.label}</span>
+            </div>
+            <h1 style={{ fontSize: 32, fontWeight: 900, margin: 0, color: '#f1f5f9', textShadow: `0 0 40px ${accent}44`, letterSpacing: 1, lineHeight: 1.1 }}>
               {selectedVehicle.year} {selectedVehicle.make} {selectedVehicle.model}
             </h1>
-            <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{selectedVehicle.label}</div>
+            <div style={{ fontSize: 13, color: '#475569', marginTop: 6, letterSpacing: 1 }}>{placement} · {material} Finish</div>
           </div>
 
-          {/* Hero image area */}
-          <div style={{ position: 'relative', zIndex: 2, width: '100%', maxWidth: 700, aspectRatio: '16/9', borderRadius: 16, overflow: 'hidden', border: '1px solid #00e5ff33', boxShadow: '0 0 60px #00e5ff44', marginBottom: 20 }}>
+          {/* Hero image */}
+          <div style={{ position: 'relative', zIndex: 2, width: '100%', maxWidth: 760, aspectRatio: '16/9', borderRadius: 20, overflow: 'hidden', border: `1px solid ${accent}33`, boxShadow: `0 0 80px ${accent}33, 0 24px 60px #00000088`, marginBottom: 24 }}>
             {displayImage ? (
               <Image
                 src={displayImage}
@@ -214,109 +252,120 @@ export default function WrapLabPage() {
                 unoptimized
               />
             ) : (
-              <div style={{ textAlign: 'center', padding: 32 }}>
-                <div style={{ fontSize: 80, marginBottom: 16 }}>{selectedVehicle.emoji}</div>
-                <div style={{ fontSize: 18, color: '#00e5ff', fontWeight: 700, marginBottom: 8 }}>
+              <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0d1526 0%, #080810 100%)', padding: 32 }}>
+                <div style={{ fontSize: 96, marginBottom: 20, filter: 'drop-shadow(0 0 20px rgba(0,229,255,0.3))' }}>{selectedVehicle.emoji}</div>
+                <div style={{ fontSize: 20, color: accent, fontWeight: 700, marginBottom: 8, letterSpacing: 0.5 }}>
                   {selectedVehicle.year} {selectedVehicle.make} {selectedVehicle.model}
                 </div>
                 <div style={{ fontSize: 14, color: '#475569' }}>
-                  {isGenerating ? '⚡ Generating elite mockup...' : 'Configure your wrap and click Generate'}
+                  {isGenerating ? '⚡ Generating elite mockup…' : 'Configure your build and click Generate →'}
                 </div>
                 {isGenerating && (
-                  <div style={{ marginTop: 16 }}>
-                    <div style={{ display: 'inline-block', width: 48, height: 48, border: '3px solid #00e5ff33', borderTop: '3px solid #00e5ff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                  <div style={{ marginTop: 20 }}>
+                    <div style={{ display: 'inline-block', width: 52, height: 52, border: `3px solid ${accent}33`, borderTop: `3px solid ${accent}`, borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
                   </div>
                 )}
               </div>
             )}
             {isGenerating && displayImage && (
-              <div style={{ position: 'absolute', inset: 0, background: '#0a0a1a99', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ position: 'absolute', inset: 0, background: '#08081099', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ display: 'inline-block', width: 48, height: 48, border: '3px solid #00e5ff33', borderTop: '3px solid #00e5ff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                  <div style={{ color: '#00e5ff', marginTop: 12, fontSize: 14 }}>Generating elite mockup…</div>
+                  <div style={{ display: 'inline-block', width: 52, height: 52, border: `3px solid ${accent}33`, borderTop: `3px solid ${accent}`, borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                  <div style={{ color: accent, marginTop: 14, fontSize: 14, fontWeight: 700, letterSpacing: 1 }}>Rendering mockup…</div>
                 </div>
               </div>
             )}
           </div>
 
+          {/* Pricing summary */}
+          <div style={{ position: 'relative', zIndex: 2, display: 'flex', gap: 12, marginBottom: 20 }}>
+            <div style={{ background: '#0d1526', border: `1px solid ${accent}22`, borderRadius: 12, padding: '12px 20px', textAlign: 'center', minWidth: 110 }}>
+              <div style={{ fontSize: 10, color: '#475569', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>Wrap Type</div>
+              <div style={{ fontSize: 14, color: accent, fontWeight: 700 }}>{classCfg.label}</div>
+            </div>
+            <div style={{ background: '#0d1526', border: `1px solid ${accent}22`, borderRadius: 12, padding: '12px 20px', textAlign: 'center', minWidth: 110 }}>
+              <div style={{ fontSize: 10, color: '#475569', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>Placement</div>
+              <div style={{ fontSize: 14, color: accent, fontWeight: 700 }}>{placement}</div>
+            </div>
+            <div style={{ background: '#0d1526', border: `1px solid ${accent}22`, borderRadius: 12, padding: '12px 20px', textAlign: 'center', minWidth: 110 }}>
+              <div style={{ fontSize: 10, color: '#475569', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>Est. Total</div>
+              <div style={{ fontSize: 18, color: accent, fontWeight: 900 }}>${estimatedPrice.toLocaleString()}</div>
+            </div>
+          </div>
+
           {/* Creative directions */}
           {result?.creativeDirections && (
-            <div style={{ position: 'relative', zIndex: 2, marginTop: 20, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, width: '100%', maxWidth: 700 }}>
+            <div style={{ position: 'relative', zIndex: 2, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, width: '100%', maxWidth: 760 }}>
               {result.creativeDirections.map((dir, i) => (
-                <div key={i} style={{ background: '#0d1526', border: '1px solid #00e5ff22', borderRadius: 8, padding: '10px 12px' }}>
-                  <div style={{ fontSize: 10, color: '#00e5ff', letterSpacing: 1, marginBottom: 4, fontWeight: 700 }}>DIRECTION {i + 1}</div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5 }}>{dir}</div>
+                <div key={i} style={{ background: '#0d1526', border: `1px solid ${accent}22`, borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 9, color: accent, letterSpacing: 2, marginBottom: 6, fontWeight: 800, textTransform: 'uppercase' }}>Direction {i + 1}</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>{dir}</div>
                 </div>
               ))}
             </div>
           )}
 
           {error && (
-            <div style={{ position: 'relative', zIndex: 2, marginTop: 16, background: '#ff005522', border: '1px solid #ff0055', borderRadius: 8, padding: '10px 16px', color: '#ff6b6b', fontSize: 13 }}>
-              {error}
+            <div style={{ position: 'relative', zIndex: 2, marginTop: 16, background: '#ff005518', border: '1px solid #ff005566', borderRadius: 10, padding: '12px 18px', color: '#ff6b6b', fontSize: 13 }}>
+              ⚠ {error}
             </div>
           )}
         </main>
 
-        {/* RIGHT CUSTOMIZATION PANEL */}
-        <aside style={{ background: '#0d0d1f', borderLeft: '1px solid #00e5ff22', padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {/* ── RIGHT BUILD PANEL ── */}
+        <aside style={{ background: '#0b0b18', borderLeft: '1px solid #ffffff0a', padding: '24px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+          {/* Tools */}
+          <section>
+            <div style={{ fontSize: 9, color: '#ff6600', letterSpacing: 3, fontWeight: 800, textTransform: 'uppercase', marginBottom: 12 }}>Tools</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setResult(null)}
+                style={{ flex: 1, background: '#0d0d1f', border: '1px solid #1e293b', color: '#94a3b8', cursor: 'pointer', padding: '8px 10px', borderRadius: 8, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.15s' }}
+              >
+                🔄 Reset
+              </button>
+              <button
+                onClick={() => { if (result?.imageUrl) { window.open(result.imageUrl, '_blank'); } }}
+                style={{ flex: 1, background: '#0d0d1f', border: '1px solid #1e293b', color: '#94a3b8', cursor: 'pointer', padding: '8px 10px', borderRadius: 8, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.15s' }}
+              >
+                💾 Save
+              </button>
+            </div>
+          </section>
 
           {/* Company Info */}
           <section>
-            <div style={{ fontSize: 10, color: '#00e5ff', letterSpacing: 2, fontWeight: 700, textTransform: 'uppercase', marginBottom: 10 }}>Company Info</div>
+            <div style={{ fontSize: 9, color: accent, letterSpacing: 3, fontWeight: 800, textTransform: 'uppercase', marginBottom: 12 }}>Company Info</div>
             <input
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
               placeholder="Company Name *"
-              style={{ width: '100%', background: '#0a0a1a', border: '1px solid #1e293b', borderRadius: 6, padding: '8px 10px', color: '#e2e8f0', fontSize: 13, marginBottom: 8, boxSizing: 'border-box' }}
+              style={{ width: '100%', background: '#080810', border: '1px solid #1e293b', borderRadius: 8, padding: '9px 12px', color: '#e2e8f0', fontSize: 13, marginBottom: 8, boxSizing: 'border-box' }}
             />
             <input
               value={industry}
               onChange={(e) => setIndustry(e.target.value)}
               placeholder="Industry (e.g. Logistics)"
-              style={{ width: '100%', background: '#0a0a1a', border: '1px solid #1e293b', borderRadius: 6, padding: '8px 10px', color: '#e2e8f0', fontSize: 13, marginBottom: 8, boxSizing: 'border-box' }}
+              style={{ width: '100%', background: '#080810', border: '1px solid #1e293b', borderRadius: 8, padding: '9px 12px', color: '#e2e8f0', fontSize: 13, marginBottom: 8, boxSizing: 'border-box' }}
             />
             <input
               value={tagline}
               onChange={(e) => setTagline(e.target.value)}
               placeholder="Tagline (optional)"
-              style={{ width: '100%', background: '#0a0a1a', border: '1px solid #1e293b', borderRadius: 6, padding: '8px 10px', color: '#e2e8f0', fontSize: 13, boxSizing: 'border-box' }}
+              style={{ width: '100%', background: '#080810', border: '1px solid #1e293b', borderRadius: 8, padding: '9px 12px', color: '#e2e8f0', fontSize: 13, boxSizing: 'border-box' }}
             />
           </section>
 
-          {/* Wrap Color */}
+          {/* Material Finish */}
           <section>
-            <div style={{ fontSize: 10, color: '#00e5ff', letterSpacing: 2, fontWeight: 700, textTransform: 'uppercase', marginBottom: 10 }}>Wrap Color</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginBottom: 10 }}>
-              {WRAP_COLORS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setSelectedColor(c)}
-                  title={c}
-                  style={{ width: '100%', aspectRatio: '1', background: c, borderRadius: 6, border: selectedColor === c ? '2px solid #fff' : '2px solid transparent', cursor: 'pointer', transition: 'all 0.15s' }}
-                />
-              ))}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="color"
-                value={customColor}
-                onChange={(e) => { setCustomColor(e.target.value); setSelectedColor(e.target.value); }}
-                style={{ width: 36, height: 36, borderRadius: 6, border: '1px solid #1e293b', cursor: 'pointer', background: 'transparent', padding: 2 }}
-              />
-              <span style={{ fontSize: 12, color: '#64748b' }}>Custom color</span>
-            </div>
-          </section>
-
-          {/* Material */}
-          <section>
-            <div style={{ fontSize: 10, color: '#00e5ff', letterSpacing: 2, fontWeight: 700, textTransform: 'uppercase', marginBottom: 10 }}>Material Finish</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <div style={{ fontSize: 9, color: accent, letterSpacing: 3, fontWeight: 800, textTransform: 'uppercase', marginBottom: 12 }}>Material Finish</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
               {MATERIALS.map((m) => (
                 <button
                   key={m}
                   onClick={() => setMaterial(m)}
-                  style={{ background: material === m ? '#00e5ff22' : '#0a0a1a', border: `1px solid ${material === m ? '#00e5ff' : '#1e293b'}`, color: material === m ? '#00e5ff' : '#64748b', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer', transition: 'all 0.15s' }}
+                  style={{ background: material === m ? `${accent}22` : '#0d0d1f', border: `1px solid ${material === m ? accent : '#1e293b'}`, color: material === m ? accent : '#64748b', borderRadius: 8, padding: '7px 13px', fontSize: 12, cursor: 'pointer', transition: 'all 0.15s', fontWeight: material === m ? 700 : 400 }}
                 >
                   {m}
                 </button>
@@ -324,17 +373,18 @@ export default function WrapLabPage() {
             </div>
           </section>
 
-          {/* Placement */}
+          {/* Wrap Placement */}
           <section>
-            <div style={{ fontSize: 10, color: '#00e5ff', letterSpacing: 2, fontWeight: 700, textTransform: 'uppercase', marginBottom: 10 }}>Wrap Placement</div>
+            <div style={{ fontSize: 9, color: accent, letterSpacing: 3, fontWeight: 800, textTransform: 'uppercase', marginBottom: 12 }}>Wrap Placement</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {PLACEMENTS.map((p) => (
                 <button
                   key={p}
                   onClick={() => setPlacement(p)}
-                  style={{ background: placement === p ? '#00e5ff22' : '#0a0a1a', border: `1px solid ${placement === p ? '#00e5ff' : '#1e293b'}`, color: placement === p ? '#00e5ff' : '#64748b', borderRadius: 6, padding: '8px 12px', fontSize: 12, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}
+                  style={{ background: placement === p ? `${accent}18` : '#0d0d1f', border: `1px solid ${placement === p ? accent : '#1e293b'}`, color: placement === p ? accent : '#64748b', borderRadius: 8, padding: '9px 14px', fontSize: 12, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s', fontWeight: placement === p ? 700 : 400, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                 >
-                  {placement === p ? '✓ ' : ''}{p}
+                  <span>{placement === p ? '✓ ' : ''}{p}</span>
+                  <span style={{ fontSize: 11, opacity: 0.7 }}>{PLACEMENT_SQ_FT[p]} ft²</span>
                 </button>
               ))}
             </div>
@@ -342,155 +392,70 @@ export default function WrapLabPage() {
 
           {/* Logo / Text */}
           <section>
-            <div style={{ fontSize: 10, color: '#00e5ff', letterSpacing: 2, fontWeight: 700, textTransform: 'uppercase', marginBottom: 10 }}>Logo / Text</div>
+            <div style={{ fontSize: 9, color: accent, letterSpacing: 3, fontWeight: 800, textTransform: 'uppercase', marginBottom: 12 }}>Logo / Text</div>
             <input
               value={logoText}
               onChange={(e) => setLogoText(e.target.value)}
               placeholder="Brand name or slogan for vehicle"
-              style={{ width: '100%', background: '#0a0a1a', border: '1px solid #1e293b', borderRadius: 6, padding: '8px 10px', color: '#e2e8f0', fontSize: 13, boxSizing: 'border-box' }}
+              style={{ width: '100%', background: '#080810', border: '1px solid #1e293b', borderRadius: 8, padding: '9px 12px', color: '#e2e8f0', fontSize: 13, boxSizing: 'border-box' }}
             />
           </section>
 
-          {/* Image Source Selection - OPTION A: Always Visible */}
+          {/* Image Source */}
           <section>
-            <div style={{ fontSize: 10, color: '#00e5ff', letterSpacing: 2, fontWeight: 700, textTransform: 'uppercase', marginBottom: 12 }}>Image Source</div>
+            <div style={{ fontSize: 9, color: accent, letterSpacing: 3, fontWeight: 800, textTransform: 'uppercase', marginBottom: 12 }}>Image Source</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              
-              {/* AI Generate Option */}
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px', borderRadius: 8, background: imageSource === 'ai' ? '#00e5ff11' : 'transparent', border: `1px solid ${imageSource === 'ai' ? '#00e5ff33' : '#1e293b'}`, transition: 'all 0.15s' }}>
-                <input
-                  type="radio"
-                  name="imageSource"
-                  value="ai"
-                  checked={imageSource === 'ai'}
-                  onChange={() => setImageSource('ai')}
-                  style={{ marginTop: 2, cursor: 'pointer', width: 16, height: 16 }}
-                />
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '11px 12px', borderRadius: 10, background: imageSource === 'ai' ? `${accent}0f` : 'transparent', border: `1px solid ${imageSource === 'ai' ? `${accent}44` : '#1e293b'}`, transition: 'all 0.15s' }}>
+                <input type="radio" name="imageSource" value="ai" checked={imageSource === 'ai'} onChange={() => setImageSource('ai')} style={{ marginTop: 2, cursor: 'pointer', width: 15, height: 15 }} />
                 <div>
-                  <div style={{ fontSize: 13, color: imageSource === 'ai' ? '#00e5ff' : '#e2e8f0', fontWeight: 700 }}>🤖 AI Generate</div>
-                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Create mockup from your design specs</div>
+                  <div style={{ fontSize: 13, color: imageSource === 'ai' ? accent : '#e2e8f0', fontWeight: 700 }}>🤖 AI Generate</div>
+                  <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>Create mockup from design specs</div>
                 </div>
               </label>
-
-              {/* Upload Option */}
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px', borderRadius: 8, background: imageSource === 'upload' ? '#ff660011' : 'transparent', border: `1px solid ${imageSource === 'upload' ? '#ff660033' : '#1e293b'}`, transition: 'all 0.15s' }}>
-                <input
-                  type="radio"
-                  name="imageSource"
-                  value="upload"
-                  checked={imageSource === 'upload'}
-                  onChange={() => setImageSource('upload')}
-                  style={{ marginTop: 2, cursor: 'pointer', width: 16, height: 16 }}
-                />
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '11px 12px', borderRadius: 10, background: imageSource === 'upload' ? '#ff660011' : 'transparent', border: `1px solid ${imageSource === 'upload' ? '#ff660033' : '#1e293b'}`, transition: 'all 0.15s' }}>
+                <input type="radio" name="imageSource" value="upload" checked={imageSource === 'upload'} onChange={() => setImageSource('upload')} style={{ marginTop: 2, cursor: 'pointer', width: 15, height: 15 }} />
                 <div>
-                  <div style={{ fontSize: 13, color: imageSource === 'upload' ? '#ff6600' : '#e2e8f0', fontWeight: 700 }}>📁 Upload Custom Image</div>
-                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Use your own wrap design or concept</div>
+                  <div style={{ fontSize: 13, color: imageSource === 'upload' ? '#ff6600' : '#e2e8f0', fontWeight: 700 }}>📁 Upload Image</div>
+                  <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>Use your own wrap design</div>
                 </div>
               </label>
             </div>
-
-            {/* File Upload Input - Shown when Upload is Selected */}
             {imageSource === 'upload' && (
-              <div style={{ marginTop: 12 }}>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handleImageUpload}
-                  style={{ display: 'none' }}
-                />
+              <div style={{ marginTop: 10 }}>
+                <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageUpload} style={{ display: 'none' }} />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  style={{
-                    width: '100%',
-                    background: '#0a0a1a',
-                    border: '2px dashed #ff660044',
-                    borderRadius: 8,
-                    padding: '12px',
-                    color: '#ff6600',
-                    fontSize: 13,
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    fontWeight: 600,
-                    transition: 'all 0.15s',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                  }}
+                  style={{ width: '100%', background: '#080810', border: '2px dashed #ff660044', borderRadius: 10, padding: '12px', color: '#ff6600', fontSize: 13, cursor: 'pointer', textAlign: 'center', fontWeight: 600, transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxSizing: 'border-box' }}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#ff6600'; e.currentTarget.style.background = '#ff660011'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#ff660044'; e.currentTarget.style.background = '#0a0a1a'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#ff660044'; e.currentTarget.style.background = '#080810'; }}
                 >
                   {customImageFile ? `✓ ${customImageFile.name}` : '↑ Click to upload image'}
                 </button>
-                <div style={{ fontSize: 10, color: '#64748b', marginTop: 6, textAlign: 'center' }}>JPG, PNG, or WebP (max 10MB)</div>
+                <div style={{ fontSize: 10, color: '#475569', marginTop: 6, textAlign: 'center' }}>JPG, PNG, or WebP · max 10 MB</div>
               </div>
             )}
           </section>
 
-          {/* Generate Button */}
+          {/* Generate */}
           <button
             onClick={handleGenerate}
             disabled={isGenerating}
-            style={{
-              background: isGenerating ? '#1e293b' : 'linear-gradient(135deg, #ff6600, #ff4400)',
-              border: 'none',
-              borderRadius: 10,
-              padding: '14px',
-              color: '#fff',
-              fontSize: 15,
-              fontWeight: 800,
-              cursor: isGenerating ? 'not-allowed' : 'pointer',
-              letterSpacing: 1,
-              textTransform: 'uppercase',
-              boxShadow: isGenerating ? 'none' : '0 0 30px #ff660066',
-              transition: 'all 0.2s',
-            }}
+            style={{ background: isGenerating ? '#1e293b' : `linear-gradient(135deg, #ff6600, #ff3300)`, border: 'none', borderRadius: 12, padding: '16px', color: '#fff', fontSize: 15, fontWeight: 900, cursor: isGenerating ? 'not-allowed' : 'pointer', letterSpacing: 1, textTransform: 'uppercase', boxShadow: isGenerating ? 'none' : '0 0 40px #ff660055', transition: 'all 0.2s' }}
           >
-            {isGenerating ? '⚡ Generating...' : '🔥 Generate Mockup'}
+            {isGenerating ? '⚡ Generating…' : '🔥 Generate Mockup'}
           </button>
         </aside>
       </div>
 
-      {/* BOTTOM VEHICLE CAROUSEL */}
-      <div style={{ background: '#0d0d1f', borderTop: '1px solid #00e5ff22', padding: '16px 24px' }}>
-        <div style={{ fontSize: 10, color: '#64748b', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 }}>Vehicle Garage — Select Model</div>
-        <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 }}>
-          {VEHICLES.map((v) => (
-            <button
-              key={v.id}
-              onClick={() => { setSelectedVehicle(v); setResult(null); }}
-              style={{
-                flexShrink: 0,
-                background: selectedVehicle.id === v.id ? 'linear-gradient(135deg, #00e5ff22, #0a0a1a)' : '#0a0a1a',
-                border: `1px solid ${selectedVehicle.id === v.id ? '#00e5ff' : '#1e293b'}`,
-                borderRadius: 10,
-                padding: '10px 16px',
-                cursor: 'pointer',
-                textAlign: 'center',
-                minWidth: 100,
-                transition: 'all 0.15s',
-                boxShadow: selectedVehicle.id === v.id ? '0 0 20px #00e5ff33' : 'none',
-              }}
-            >
-              <div style={{ fontSize: 28, marginBottom: 4 }}>{v.emoji}</div>
-              <div style={{ fontSize: 11, color: selectedVehicle.id === v.id ? '#00e5ff' : '#64748b', fontWeight: selectedVehicle.id === v.id ? 700 : 400, whiteSpace: 'nowrap' }}>
-                {v.label}
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 900px) {
-          .wrap-lab-grid { grid-template-columns: 1fr !important; }
-        }
         * { box-sizing: border-box; }
         input { outline: none; }
         input:focus { border-color: #00e5ff66 !important; }
-        button:hover { opacity: 0.85; }
+        button:hover:not(:disabled) { opacity: 0.88; }
+        @media (max-width: 860px) {
+          .wrap-lab-main { grid-template-columns: 1fr !important; }
+        }
       `}</style>
     </div>
   );
