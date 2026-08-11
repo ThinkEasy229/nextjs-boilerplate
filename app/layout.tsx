@@ -4,7 +4,7 @@ import Nav from '@/components/Nav';
 
 export const metadata: Metadata = {
   title: 'Think Easy Agency',
-  description: 'Professional promo agency tools: Wrap Lab, Billboard Lab, Driver Portal.',
+  description: 'Professional promo agency tools with HR operations, design studio, client onboarding, and driver workflows.',
 };
 
 export default function RootLayout({

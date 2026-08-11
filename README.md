@@ -7,6 +7,7 @@ Premium Next.js vehicle wrap designer with:
 - real OpenAI vehicle-wrap renders for submitted briefs
 - three written creative directions plus premium upsell flow
 - direct sales handoff when a customer wants help instead of purchasing
+- JSON-backed HR operations, design studio, client onboarding, and driver onboarding portals
 
 ## Local development
 
@@ -30,6 +31,15 @@ Optional:
 - `FRAMER_ORIGIN` for CORS when embedding from Framer
 - `NEXT_PUBLIC_SALES_EMAIL` / `SALES_EMAIL` for the contact-sales CTA
 - `NEXT_PUBLIC_SALES_PHONE` for the displayed sales phone number
+
+## Operations portals
+
+- `/hr-operations`
+- `/design-studio`
+- `/client-onboard`
+- `/driver-onboard`
+
+See `/SETUP.md` for seeded credentials, invite flow, and setup details.
 
 ## API
 
