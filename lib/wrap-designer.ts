@@ -23,6 +23,9 @@ export interface SalesContact {
 
 export interface WrapDesignRequest {
   vehicleType: string;
+  vehicleYear: string;
+  vehicleMake: string;
+  vehicleModel: string;
   companyName: string;
   contactEmail: string;
   industry: string;
@@ -45,11 +48,24 @@ export interface WrapDesignConcept {
   mockupThumbnail: string;
 }
 
+export interface WrapVehicleSpecs {
+  vehicleType: string;
+  vehicleYear: string;
+  vehicleMake: string;
+  vehicleModel: string;
+}
+
 export interface WrapDesignSessionData {
   sessionId: string;
   selectedVehicle: VehicleOption;
-  concepts: WrapDesignConcept[];
-  gallery: Array<{
+  vehicleSpecs: WrapVehicleSpecs;
+  imageUrl: string;
+  creativeDirectionOne: string;
+  creativeDirectionTwo: string;
+  creativeDirectionThree: string;
+  creativeDirections: [string, string, string];
+  concepts?: WrapDesignConcept[];
+  gallery?: Array<{
     id: string;
     title: string;
     description: string;
@@ -157,27 +173,67 @@ export function getVehicleOption(vehicleType: string) {
   return VEHICLE_LIBRARY.find((vehicle) => vehicle.id === vehicleType) ?? VEHICLE_LIBRARY[0];
 }
 
-export function validateWrapDesignRequest(payload: unknown): payload is WrapDesignRequest {
+export function getWrapDesignRequestValidationError(payload: unknown) {
   if (!payload || typeof payload !== 'object') {
-    return false;
+    return 'Request body must be a JSON object.';
   }
 
   const record = payload as Record<string, unknown>;
 
-  return (
-    typeof record.vehicleType === 'string' &&
-    record.vehicleType.trim().length > 0 &&
-    typeof record.companyName === 'string' &&
-    record.companyName.trim().length > 1 &&
-    typeof record.contactEmail === 'string' &&
-    isLikelyEmail(record.contactEmail) &&
-    typeof record.industry === 'string' &&
-    record.industry.trim().length > 0 &&
-    typeof record.preferredColors === 'string' &&
-    record.preferredColors.trim().length > 0 &&
-    typeof record.designDirection === 'string' &&
-    record.designDirection.trim().length > 0
-  );
+  if (typeof record.vehicleType !== 'string' || record.vehicleType.trim().length === 0) {
+    return 'vehicleType is required.';
+  }
+
+  const vehicleType = record.vehicleType.trim();
+
+  if (!VEHICLE_LIBRARY.some((vehicle) => vehicle.id === vehicleType)) {
+    return 'vehicleType must match one of the supported vehicle options.';
+  }
+
+  if (typeof record.vehicleYear !== 'string' || !/^\d{4}$/.test(record.vehicleYear.trim())) {
+    return 'vehicleYear is required and must be a 4-digit year string.';
+  }
+
+  const vehicleYear = Number(record.vehicleYear.trim());
+  const maxVehicleYear = new Date().getFullYear() + 2;
+
+  if (vehicleYear < 1900 || vehicleYear > maxVehicleYear) {
+    return `vehicleYear must be between 1900 and ${maxVehicleYear}.`;
+  }
+
+  if (typeof record.vehicleMake !== 'string' || record.vehicleMake.trim().length === 0) {
+    return 'vehicleMake is required.';
+  }
+
+  if (typeof record.vehicleModel !== 'string' || record.vehicleModel.trim().length === 0) {
+    return 'vehicleModel is required.';
+  }
+
+  if (typeof record.companyName !== 'string' || record.companyName.trim().length === 0) {
+    return 'companyName is required.';
+  }
+
+  if (typeof record.contactEmail !== 'string' || !isLikelyEmail(record.contactEmail.trim())) {
+    return 'contactEmail is required and must be a valid email address.';
+  }
+
+  if (typeof record.industry !== 'string' || record.industry.trim().length === 0) {
+    return 'industry is required.';
+  }
+
+  if (typeof record.preferredColors !== 'string' || record.preferredColors.trim().length === 0) {
+    return 'preferredColors is required.';
+  }
+
+  if (typeof record.designDirection !== 'string' || record.designDirection.trim().length === 0) {
+    return 'designDirection is required.';
+  }
+
+  return null;
+}
+
+export function validateWrapDesignRequest(payload: unknown): payload is WrapDesignRequest {
+  return getWrapDesignRequestValidationError(payload) === null;
 }
 
 export function createFallbackConcepts(
@@ -228,9 +284,21 @@ export function createFallbackConcepts(
     }),
   ];
 
+  const creativeDirections = concepts.map((concept) => `${concept.headline}. ${concept.rationale}`) as [
+    string,
+    string,
+    string,
+  ];
+
   return {
     sessionId: '',
     selectedVehicle,
+    vehicleSpecs: getVehicleSpecs(request),
+    imageUrl: concepts[0].mockupImage,
+    creativeDirectionOne: creativeDirections[0],
+    creativeDirectionTwo: creativeDirections[1],
+    creativeDirectionThree: creativeDirections[2],
+    creativeDirections,
     concepts,
     gallery: concepts.map((concept) => ({
       id: concept.id,
@@ -240,6 +308,15 @@ export function createFallbackConcepts(
     })),
     premiumPackage: PREMIUM_PACKAGE,
     contact,
+  };
+}
+
+export function getVehicleSpecs(request: WrapDesignRequest): WrapVehicleSpecs {
+  return {
+    vehicleType: request.vehicleType.trim(),
+    vehicleYear: request.vehicleYear.trim(),
+    vehicleMake: request.vehicleMake.trim(),
+    vehicleModel: request.vehicleModel.trim(),
   };
 }
 

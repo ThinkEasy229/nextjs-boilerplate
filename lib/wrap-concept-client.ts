@@ -4,6 +4,7 @@ import type {
   VehicleOption,
   WrapDesignRequest,
   WrapDesignSessionData,
+  WrapVehicleSpecs,
 } from '@/lib/wrap-designer';
 import { validateWrapDesignRequest } from '@/lib/wrap-designer';
 
@@ -23,8 +24,10 @@ export interface WrapConceptResponse {
   data: WrapDesignSessionData;
   metadata: {
     generatedAt: string;
-    source: 'ai' | 'fallback';
+    imageUrlExpiresAt: string;
+    source: 'ai';
     stored: boolean;
+    vehicle: WrapVehicleSpecs;
   };
 }
 
@@ -37,15 +40,25 @@ export async function fetchWrapDesignerBootstrap(
 ): Promise<WrapConceptBootstrapResponse> {
   const endpoint = resolveWrapConceptEndpoint(apiUrl);
   const response = await fetch(endpoint, { method: 'GET' });
-
-  const data = (await response.json()) as WrapConceptBootstrapResponse | WrapConceptError;
+  const data = await readResponseJson<WrapConceptBootstrapResponse | WrapConceptError>(response);
 
   if (!response.ok) {
-    const errorMessage = 'error' in data ? data.error : 'Unknown error occurred';
+    const errorMessage =
+      data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+        ? data.error
+        : 'Unknown error occurred';
     throw new Error(`API Error (${response.status}): ${errorMessage}`);
   }
 
-  return data as WrapConceptBootstrapResponse;
+  if (!data) {
+    throw new Error('API Error: Missing JSON response body');
+  }
+
+  if (!('success' in data) || !data.success) {
+    throw new Error('API Error: Invalid bootstrap response');
+  }
+
+  return data;
 }
 
 export async function generateWrapConcept(
@@ -61,15 +74,25 @@ export async function generateWrapConcept(
     },
     body: JSON.stringify(params),
   });
-
-  const data = (await response.json()) as WrapConceptResponse | WrapConceptError;
+  const data = await readResponseJson<WrapConceptResponse | WrapConceptError>(response);
 
   if (!response.ok) {
-    const errorMessage = 'error' in data ? data.error : 'Unknown error occurred';
+    const errorMessage =
+      data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+        ? data.error
+        : 'Unknown error occurred';
     throw new Error(`API Error (${response.status}): ${errorMessage}`);
   }
 
-  return data as WrapConceptResponse;
+  if (!data) {
+    throw new Error('API Error: Missing JSON response body');
+  }
+
+  if (!('success' in data) || !data.success) {
+    throw new Error('API Error: Invalid wrap concept response');
+  }
+
+  return data;
 }
 
 export { validateWrapDesignRequest as validateWrapConceptParams };
@@ -84,4 +107,22 @@ function resolveWrapConceptEndpoint(apiUrl: string) {
   }
 
   throw new Error('API URL not configured');
+}
+
+async function readResponseJson<T>(response: Response): Promise<T | null> {
+  const text = await response.text();
+
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    if (!response.ok) {
+      return { error: text } as T;
+    }
+
+    throw new Error('API Error: Invalid JSON response body');
+  }
 }

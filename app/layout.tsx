@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import Nav from '@/components/Nav';
 
 export const metadata: Metadata = {
-  title: 'Vehicle Wrap Designer',
-  description: 'Premium AI-assisted vehicle wrap designer with real-time previews and sales handoff.',
+  title: 'Think Easy Agency',
+  description: 'Professional promo agency tools with HR operations, design studio, client onboarding, and driver workflows.',
 };
 
 export default function RootLayout({
@@ -13,7 +14,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="min-h-full bg-slate-950 text-white">{children}</body>
+      <body className="min-h-full bg-slate-950 text-white">
+        <Nav />
+        {children}
+      </body>
     </html>
   );
 }

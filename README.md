@@ -4,9 +4,10 @@ Premium Next.js vehicle wrap designer with:
 
 - vehicle-specific selection cards
 - AI-assisted concept generation via `/api/wrap-concept`
-- real-time branded mockup previews
-- concept gallery and premium upsell flow
+- real OpenAI vehicle-wrap renders for submitted briefs
+- three written creative directions plus premium upsell flow
 - direct sales handoff when a customer wants help instead of purchasing
+- JSON-backed HR operations, design studio, client onboarding, and driver onboarding portals
 
 ## Local development
 
@@ -31,6 +32,15 @@ Optional:
 - `NEXT_PUBLIC_SALES_EMAIL` / `SALES_EMAIL` for the contact-sales CTA
 - `NEXT_PUBLIC_SALES_PHONE` for the displayed sales phone number
 
+## Operations portals
+
+- `/hr-operations`
+- `/design-studio`
+- `/client-onboard`
+- `/driver-onboard`
+
+See `/SETUP.md` for seeded credentials, invite flow, and setup details.
+
 ## API
 
 ### `GET /api/wrap-concept`
@@ -44,6 +54,9 @@ Accepts:
 ```json
 {
   "vehicleType": "cargo-van",
+  "vehicleYear": "2024",
+  "vehicleMake": "Ford",
+  "vehicleModel": "Transit",
   "companyName": "Wrap Lab Pro",
   "contactEmail": "design@wraplabpro.com",
   "industry": "Commercial fleet branding",
@@ -54,17 +67,4 @@ Accepts:
 }
 ```
 
-Returns three concepts, gallery previews, premium package information, a sales contact path, and a stored session id.
-
-## API Endpoints
-
-### `GET /api/joke`
-
-Returns a random joke from an external joke provider.
-
-Optional query params:
-
-- `type`: `general` (default) or `programming`
-- `format`: `structured` (default) or `single`
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Returns a single DALL-E image URL, three written creative directions, vehicle metadata, premium package information, a sales contact path, and a stored session id.

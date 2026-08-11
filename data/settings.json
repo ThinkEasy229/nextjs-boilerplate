@@ -1,0 +1,12 @@
+{
+  "platformFeePercent": 15,
+  "clientProjectAutoApprove": false,
+  "driverApplicationAutoApprove": false,
+  "requiredDocumentTypes": [
+    "W4",
+    "License",
+    "Insurance",
+    "Background Check",
+    "Offer Letter"
+  ]
+}

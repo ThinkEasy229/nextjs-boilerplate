@@ -1,0 +1,29 @@
+[
+  {
+    "id": "user-24ee69a7-ea22-47e2-8b00-60b501679ab7",
+    "name": "HR Manager",
+    "email": "hr-manager@thinkeasy.local",
+    "role": "hr-manager",
+    "passwordHash": "c0487b3faa31289140748a53db70027747cd771f036e0e77c91c86e7cc84ecf2c6478ff56b15bd5e60972286b7c8c5b8f3cd40294fd853b2c73535a39832af1e",
+    "passwordSalt": "a4d77058-ca1d-468e-bfd7-8651bfe083c9",
+    "status": "active"
+  },
+  {
+    "id": "user-b3f4c200-f65c-4c1b-928e-02191069dd85",
+    "name": "HR Recruiter",
+    "email": "hr-recruiter@thinkeasy.local",
+    "role": "hr-recruiter",
+    "passwordHash": "b171e4ad3026739ec4496f1efcb4886e75db859defdcd974305676b80df9655479f33c27d86bfc764c0d13dd2643d36b1889c4c057575ff22e3d470ae3fd5e6e",
+    "passwordSalt": "efdf2444-855e-4930-9169-f24b3a7da32b",
+    "status": "active"
+  },
+  {
+    "id": "user-0b3ebb05-4077-4d59-9fc5-7a918cff1f82",
+    "name": "Design Lead",
+    "email": "design@thinkeasy.local",
+    "role": "design-team",
+    "passwordHash": "f9322dd433fbdc7eb0c126a8d09c93cb3648f298524976567b14561a7d8433dd49043cf9bab3c0238303fae0555425fa3ae2c6c0014a5ed1b42526bdf6e9174a",
+    "passwordSalt": "51f6291e-856b-425a-bb1d-25537500e79b",
+    "status": "active"
+  }
+]
