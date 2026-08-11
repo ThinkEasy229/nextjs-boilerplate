@@ -31,11 +31,21 @@ export async function POST(request: NextRequest) {
     const insurancePolicyNumber = formData.get('insurancePolicyNumber');
     const backgroundConsent = formData.get('backgroundConsent');
     const licenseFile = formData.get('licenseFile');
+    const licenseBackFile = formData.get('licenseBackFile');
     const insuranceFile = formData.get('insuranceFile');
 
-    const requiredFields = [name, email, phone, dob, address, emergencyContact, vehicleYear, vehicleMake, vehicleModel, vin, insuranceProvider];
-    if (requiredFields.some((field) => typeof field !== 'string' || !field.trim()) || !(licenseFile instanceof File) || !(insuranceFile instanceof File)) {
+    const requiredFields = [name, email, phone, dob, address, vehicleYear, vehicleMake, vehicleModel, vin, insuranceProvider, insurancePolicyNumber];
+    if (requiredFields.some((field) => typeof field !== 'string' || !field.trim())) {
       return NextResponse.json({ success: false, error: 'Please complete all required fields.' }, { status: 400 });
+    }
+    if (!(licenseFile instanceof File) || !(licenseBackFile instanceof File)) {
+      return NextResponse.json({ success: false, error: 'Driver license front and back uploads are required.' }, { status: 400 });
+    }
+    if (!(insuranceFile instanceof File)) {
+      return NextResponse.json({ success: false, error: 'Insurance card upload is required.' }, { status: 400 });
+    }
+    if (backgroundConsent !== 'true') {
+      return NextResponse.json({ success: false, error: 'Background consent must be confirmed before submitting.' }, { status: 400 });
     }
 
     const safeName = name as string;
@@ -43,7 +53,7 @@ export async function POST(request: NextRequest) {
     const safePhone = phone as string;
     const safeDob = dob as string;
     const safeAddress = address as string;
-    const safeEmergencyContact = emergencyContact as string;
+    const safeEmergencyContact = typeof emergencyContact === 'string' ? emergencyContact.trim() : '';
     const safeVehicleYear = vehicleYear as string;
     const safeVehicleMake = vehicleMake as string;
     const safeVehicleModel = vehicleModel as string;
@@ -51,11 +61,9 @@ export async function POST(request: NextRequest) {
     const safeInsuranceProvider = insuranceProvider as string;
     const safeInsurancePolicyNumber = typeof insurancePolicyNumber === 'string' ? insurancePolicyNumber.trim() : '';
     const safeNotes = typeof formData.get('notes') === 'string' ? (formData.get('notes') as string).trim() : '';
-
     const licenseUpload = await saveUploadedFile(licenseFile, 'driver-licenses');
     const insuranceUpload = await saveUploadedFile(insuranceFile, 'driver-insurance');
-    const licenseBackRaw = formData.get('licenseBackFile');
-    const licenseBackUpload = licenseBackRaw instanceof File ? await saveUploadedFile(licenseBackRaw, 'driver-licenses') : null;
+    const licenseBackUpload = await saveUploadedFile(licenseBackFile, 'driver-licenses');
 
     const settings = readCollection('settings');
     const autoApproved = settings.driverApplicationAutoApprove;
@@ -78,7 +86,7 @@ export async function POST(request: NextRequest) {
       insurancePolicyNumber: safeInsurancePolicyNumber,
       licenseFile: licenseUpload.publicPath,
       insuranceFile: insuranceUpload.publicPath,
-      licenseBackFile: licenseBackUpload ? licenseBackUpload.publicPath : '',
+      licenseBackFile: licenseBackUpload.publicPath,
       documentVerificationStatus: 'pending',
       documents: [
         {
@@ -93,7 +101,7 @@ export async function POST(request: NextRequest) {
         {
           key: 'license-back',
           label: 'Driver License (Back)',
-          filePath: licenseBackUpload ? licenseBackUpload.publicPath : null,
+          filePath: licenseBackUpload.publicPath,
           status: 'pending',
           uploadedAt: now,
           reviewedAt: null,

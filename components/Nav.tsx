@@ -18,7 +18,9 @@ export default function Nav() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-950/90 backdrop-blur border-b border-cyan-900/40">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-        <span className="text-cyan-400 font-bold tracking-widest text-sm uppercase">Think Easy Agency</span>
+        <Link className="text-cyan-400 font-bold tracking-widest text-sm uppercase" href="/">
+          Think Easy Agency
+        </Link>
         <div className="flex gap-1">
           {links.map((l) => (
             <Link
