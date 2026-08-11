@@ -49,7 +49,8 @@ export async function POST(request: NextRequest) {
     const safeVehicleModel = vehicleModel as string;
     const safeVin = vin as string;
     const safeInsuranceProvider = insuranceProvider as string;
-
+const safeInsuranceFile = insuranceFile instanceof File ? insuranceFile : null;
+const safeLicenseBackFile = licenseBackFile instanceof File ? licenseBackFile : null;
     const licenseUpload = await saveUploadedFile(licenseFile, 'driver-licenses');
     const insuranceUpload = await saveUploadedFile(insuranceFile, 'driver-insurance');
     const settings = readCollection('settings');
@@ -71,7 +72,7 @@ const application: DriverApplication = {
   vehicleMake: safeVehicleMake,
   vehicleModel: safeVehicleModel,
   vin: safeVin,
-
+const safeLicenseFile = licenseFile instanceof File ? licenseFile : null;
   insuranceProvider: safeInsuranceProvider,
 insurancePolicyNumber: safeInsurancePolicyNumber,
   licenseFile: safeLicenseFile,
