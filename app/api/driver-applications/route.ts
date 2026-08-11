@@ -72,7 +72,7 @@ const application: DriverApplication = {
   vin: safeVin,
 
   insuranceProvider: safeInsuranceProvider,
-  insurancePolicyNumber: safeInsurancePolicyNumber,
+insurancePolicyNumber: safeInsurancePolicyNumber,
   licenseFile: safeLicenseFile,
   insuranceFile: safeInsuranceFile,
   licenseBackFile: safeLicenseBackFile || '',
