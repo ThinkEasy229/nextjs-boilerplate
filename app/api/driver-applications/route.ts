@@ -57,37 +57,87 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString();
     const accessCode = autoApproved ? createDriverCode(safeName, safeEmail, null).code : null;
 
-    const application: DriverApplication = {
-      id: createId('application'),
-      name: safeName,
-      email: safeEmail,
-      phone: safePhone,
-      dob: safeDob,
-      address: safeAddress,
-      emergencyContact: safeEmergencyContact,
-      vehicleYear: safeVehicleYear,
-      vehicleMake: safeVehicleMake,
-      vehicleModel: safeVehicleModel,
-      vin: safeVin,
-      insuranceProvider: safeInsuranceProvider,
-      insurancePolicyNumber: typeof insurancePolicyNumber === 'string' ? insurancePolicyNumber : '',
-      licenseFile: licenseUpload.publicPath,
-      insuranceFile: insuranceUpload.publicPath,
-      status: autoApproved ? 'approved' : 'pending',
-      appliedDate: now,
-      approvedDate: autoApproved ? now : null,
-      approvedBy: autoApproved ? 'system' : null,
-      accessCode,
-      notes: '',
-      backgroundConsent: backgroundConsent === 'true',
-      timeline: [
-        {
-          status: autoApproved ? 'approved' : 'pending',
-          changedAt: now,
-          changedBy: safeEmail,
-        },
-      ],
-    };
+   const now = new Date().toISOString();
+
+const application: DriverApplication = {
+  id: createId('application'),
+  name: safeName,
+  email: safeEmail,
+  phone: safePhone,
+  dob: safeDob,
+  address: safeAddress,
+  emergencyContact: safeEmergencyContact || undefined,
+
+  vehicleYear: safeVehicleYear,
+  vehicleMake: safeVehicleMake,
+  vehicleModel: safeVehicleModel,
+  vin: safeVin,
+
+  insuranceProvider: safeInsuranceProvider,
+  insurancePolicyNumber: safeInsurancePolicyNumber,
+  licenseFile: safeLicenseFile,
+  insuranceFile: safeInsuranceFile,
+  licenseBackFile: safeLicenseBackFile || '',
+
+  documentVerificationStatus: 'pending',
+  documents: [
+    {
+      key: 'license-front',
+      label: 'Driver License (Front)',
+      filePath: safeLicenseFile || null,
+      status: 'pending',
+      uploadedAt: now,
+      reviewedAt: null,
+      reviewedBy: null,
+    },
+    {
+      key: 'license-back',
+      label: 'Driver License (Back)',
+      filePath: safeLicenseBackFile || null,
+      status: 'pending',
+      uploadedAt: now,
+      reviewedAt: null,
+      reviewedBy: null,
+    },
+    {
+      key: 'insurance-card',
+      label: 'Insurance Card',
+      filePath: safeInsuranceFile || null,
+      status: 'pending',
+      uploadedAt: now,
+      reviewedAt: null,
+      reviewedBy: null,
+    },
+    {
+      key: 'background-consent',
+      label: 'Background Check Consent',
+      filePath: null,
+      status: 'pending',
+      uploadedAt: now,
+      reviewedAt: null,
+      reviewedBy: null,
+    },
+  ],
+  backgroundCheck: {
+    provider: process.env.BACKGROUND_CHECK_PROVIDER || 'internal',
+    status: 'not-requested',
+    summary: 'Awaiting consent and HR review',
+    requestedAt: null,
+    completedAt: null,
+    reviewerId: null,
+    externalId: null,
+    retryable: true,
+    attempts: 0,
+    lastError: null,
+  },
+
+  status: autoApproved ? 'approved' : 'pending',
+  appliedDate: now,
+  approvedDate: autoApproved ? now : null,
+  reviewedBy: autoApproved ? 'system' : null,
+  notes: safeNotes || '',
+  accessCode,
+};
 
     const applications = readCollection('driverApplications');
     applications.unshift(application);
