@@ -1,292 +1,294 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import {
+  createFallbackConcepts,
+  createVehicleMockup,
+  getSalesContact,
+  PREMIUM_PACKAGE,
+  validateWrapDesignRequest,
+  VEHICLE_LIBRARY,
+  type WrapDesignRequest,
+  type WrapDesignSessionData,
+} from '@/lib/wrap-designer';
 
-// Validate environment variables
-const validateEnvironment = (): string => {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error('OpenAI API key not configured in environment');
-  }
-  return apiKey;
-};
+export const runtime = 'nodejs';
 
-// Input validation schema
-interface WrapConceptRequest {
-  vehicleType: string;
-  designDirection: string;
-  companyName: string;
-  contactEmail: string;
-  revisionNotes?: string;
+const STORAGE_DIRECTORY = path.join(os.tmpdir(), 'wrap-designer');
+const SESSIONS_DIRECTORY = path.join(STORAGE_DIRECTORY, 'sessions');
+const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+interface StoredWrapSession {
+  sessionId: string;
+  generatedAt: string;
+  source: 'ai' | 'fallback';
+  data: WrapDesignSessionData;
 }
 
-// Validate request payload
-const validateInput = (data: unknown): WrapConceptRequest => {
-  if (!data || typeof data !== 'object') {
-    throw new Error('Request body must be a valid JSON object');
-  }
-
-  const payload = data as Record<string, unknown>;
-
-  const vehicleType = payload.vehicleType;
-  const designDirection = payload.designDirection;
-  const companyName = payload.companyName;
-  const contactEmail = payload.contactEmail;
-  const revisionNotes = payload.revisionNotes;
-
-  // Validate required fields
-  if (typeof vehicleType !== 'string' || vehicleType.trim().length === 0) {
-    throw new Error('vehicleType is required and must be a non-empty string');
-  }
-
-  if (typeof designDirection !== 'string' || designDirection.trim().length === 0) {
-    throw new Error('designDirection is required and must be a non-empty string');
-  }
-
-  if (typeof companyName !== 'string' || companyName.trim().length === 0) {
-    throw new Error('companyName is required and must be a non-empty string');
-  }
-
-  if (typeof contactEmail !== 'string' || !isValidEmail(contactEmail)) {
-    throw new Error('contactEmail is required and must be a valid email address');
-  }
-
-  // Validate string lengths to prevent abuse
-  if (vehicleType.length > 100) {
-    throw new Error('vehicleType must be 100 characters or less');
-  }
-
-  if (designDirection.length > 500) {
-    throw new Error('designDirection must be 500 characters or less');
-  }
-
-  if (companyName.length > 200) {
-    throw new Error('companyName must be 200 characters or less');
-  }
-
-  if (revisionNotes && typeof revisionNotes === 'string' && revisionNotes.length > 500) {
-    throw new Error('revisionNotes must be 500 characters or less');
-  }
+function getCorsHeaders(request?: NextRequest) {
+  const origin = process.env.FRAMER_ORIGIN || request?.headers.get('origin') || request?.nextUrl.origin || 'http://localhost:3000';
 
   return {
-    vehicleType: vehicleType.trim(),
-    designDirection: designDirection.trim(),
-    companyName: companyName.trim(),
-    contactEmail: contactEmail.trim(),
-    revisionNotes: revisionNotes && typeof revisionNotes === 'string' ? revisionNotes.trim() : undefined,
-  };
-};
-
-// Simple email validation
-const isValidEmail = (email: string): boolean => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email) && email.length <= 254;
-};
-
-// Extract JSON from text response (handles markdown code blocks)
-const extractJSON = (text: string): Record<string, unknown> => {
-  try {
-    // Try direct JSON parsing first
-    return JSON.parse(text);
-  } catch {
-    // Try to extract JSON from markdown code blocks
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (jsonMatch && jsonMatch[1]) {
-      try {
-        return JSON.parse(jsonMatch[1]);
-      } catch {
-        throw new Error('Invalid JSON in response');
-      }
-    }
-    throw new Error('No valid JSON found in response');
-  }
-};
-
-// Generate wrap concept using OpenAI
-const generateWrapConcept = async (
-  apiKey: string,
-  request: WrapConceptRequest
-): Promise<{
-  imageUrl: string;
-  conceptTitle: string;
-  creativeRationale: string;
-}> => {
-  const client = new OpenAI({ apiKey });
-
-  // Build creative prompt for DALL-E
-  const revisionContext = request.revisionNotes
-    ? `\n\nIncorporate feedback: ${request.revisionNotes}`
-    : '';
-
-  const imagePrompt = `Create a professional vehicle wrap design concept for a ${request.vehicleType} for ${request.companyName}. 
-Design direction: ${request.designDirection}${revisionContext}
-
-The design should be visually striking, brand-appropriate, and ready for production. Photorealistic rendering of the vehicle with the wrap applied.`;
-
-  try {
-    // Generate image using DALL-E 3
-    const imageResponse = await client.images.generate({
-      model: 'dall-e-3',
-      prompt: imagePrompt,
-      n: 1,
-      size: '1024x1024',
-      quality: 'standard',
-    });
-
-    const imageUrl = imageResponse.data[0]?.url;
-    if (!imageUrl) {
-      throw new Error('Failed to generate image from OpenAI');
-    }
-
-    // Generate concept title and rationale using GPT-4
-    const textResponse = await client.chat.completions.create({
-      model: 'gpt-4-turbo',
-      messages: [
-        {
-          role: 'user',
-          content: `Given this vehicle wrap request:
-- Vehicle: ${request.vehicleType}
-- Company: ${request.companyName}
-- Design Direction: ${request.designDirection}
-${request.revisionNotes ? `- Revision Notes: ${request.revisionNotes}` : ''}
-
-Please provide:
-1. A concise concept title (max 10 words)
-2. A brief creative rationale (max 100 words)
-
-Format your response as valid JSON with keys: "conceptTitle" and "creativeRationale"`,
-        },
-      ],
-      max_tokens: 300,
-      temperature: 0.7,
-    });
-
-    const textContent = textResponse.choices[0]?.message.content;
-    if (!textContent) {
-      throw new Error('Failed to generate concept text from OpenAI');
-    }
-
-    // Parse JSON response with better error handling
-    let conceptData: Record<string, unknown>;
-    try {
-      conceptData = extractJSON(textContent);
-    } catch {
-      // Fallback if JSON parsing fails
-      conceptData = {
-        conceptTitle: `${request.companyName} ${request.vehicleType} Wrap`,
-        creativeRationale: 'Custom vehicle wrap design concept based on your specifications.',
-      };
-    }
-
-    return {
-      imageUrl,
-      conceptTitle: String(conceptData.conceptTitle || `${request.companyName} Wrap Design`),
-      creativeRationale: String(conceptData.creativeRationale || 'Professional vehicle wrap design concept.'),
-    };
-  } catch (error) {
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error('Unknown error during wrap concept generation');
-  }
-};
-
-// Main API route handler
-export async function POST(request: NextRequest) {
-  // CORS headers
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': process.env.FRAMER_ORIGIN || '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
+}
+
+export async function GET(request: NextRequest) {
+  const headers = getCorsHeaders(request);
+  const sessionId = request.nextUrl.searchParams.get('sessionId');
 
   try {
-    // Validate environment
-    const apiKey = validateEnvironment();
+    if (sessionId) {
+      if (!SESSION_ID_PATTERN.test(sessionId)) {
+        return NextResponse.json({ error: 'Invalid design session id' }, { status: 400, headers });
+      }
 
-    // Parse and validate request body
-    let payload: unknown;
-    try {
-      payload = await request.json();
-    } catch {
+      const stored = await readSession(sessionId);
+
+      if (!stored) {
+        return NextResponse.json({ error: 'Design session not found' }, { status: 404, headers });
+      }
+
       return NextResponse.json(
-        { error: 'Invalid JSON in request body' },
-        { status: 400, headers: corsHeaders }
+        {
+          success: true,
+          data: stored.data,
+          metadata: {
+            generatedAt: stored.generatedAt,
+            source: stored.source,
+            stored: true,
+          },
+        },
+        { headers }
       );
     }
 
-    const validatedInput = validateInput(payload);
-
-    // Generate wrap concept
-    const concept = await generateWrapConcept(apiKey, validatedInput);
-
-    // Return success response
     return NextResponse.json(
       {
         success: true,
         data: {
-          imageUrl: concept.imageUrl,
-          conceptTitle: concept.conceptTitle,
-          creativeRationale: concept.creativeRationale,
-        },
-        metadata: {
-          vehicleType: validatedInput.vehicleType,
-          companyName: validatedInput.companyName,
-          generatedAt: new Date().toISOString(),
+          availableVehicles: VEHICLE_LIBRARY,
+          premiumPackage: PREMIUM_PACKAGE,
+          contact: getSalesContact(process.env.SALES_EMAIL || process.env.NEXT_PUBLIC_SALES_EMAIL),
         },
       },
-      { status: 200, headers: corsHeaders }
+      { headers }
     );
   } catch (error) {
-    // Handle OpenAI API errors
-    if (error instanceof Error) {
-      if (error.message.includes('insufficient_quota')) {
-        return NextResponse.json(
-          { error: 'API quota exceeded. Please try again later.' },
-          { status: 429, headers: corsHeaders }
-        );
-      }
-      if (error.message.includes('rate_limit')) {
-        return NextResponse.json(
-          { error: 'Rate limit exceeded. Please wait before trying again.' },
-          { status: 429, headers: corsHeaders }
-        );
-      }
-      if (error.message.includes('401') || error.message.includes('authentication')) {
-        return NextResponse.json(
-          { error: 'Invalid OpenAI API key. Please check your configuration.' },
-          { status: 401, headers: corsHeaders }
-        );
-      }
-      if (error.message.includes('OpenAI')) {
-        return NextResponse.json(
-          { error: 'External service error. Please try again later.' },
-          { status: 503, headers: corsHeaders }
-        );
-      }
-      if (error.message.includes('is required') || error.message.includes('must be')) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-    }
-
-    console.error('Wrap concept generation error:', error);
-
     return NextResponse.json(
-      { error: 'Failed to generate wrap concept. Please try again.' },
-      { status: 500, headers: corsHeaders }
+      {
+        error: error instanceof Error ? error.message : 'Failed to load wrap designer metadata',
+      },
+      { status: 500, headers }
     );
   }
 }
 
-// Enable CORS for OPTIONS requests
-export async function OPTIONS(request: NextRequest) {
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': process.env.FRAMER_ORIGIN || '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
+export async function POST(request: NextRequest) {
+  const headers = getCorsHeaders(request);
 
-  return new NextResponse(null, { headers: corsHeaders, status: 204 });
+  try {
+    const body = (await request.json()) as WrapDesignRequest;
+
+    if (!validateWrapDesignRequest(body)) {
+      return NextResponse.json(
+        {
+          error:
+            'Missing required fields: vehicleType, companyName, contactEmail, industry, preferredColors, designDirection',
+        },
+        { status: 400, headers }
+      );
+    }
+
+    const configuredSalesEmail = process.env.SALES_EMAIL || process.env.NEXT_PUBLIC_SALES_EMAIL;
+    const generatedAt = new Date().toISOString();
+
+    let data = createFallbackConcepts(body, configuredSalesEmail);
+    let source: 'ai' | 'fallback' = 'fallback';
+
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        data = await generateAiConcepts(body, configuredSalesEmail);
+        source = 'ai';
+      } catch (error) {
+        console.error('AI wrap concept generation failed, serving fallback concepts instead.', error);
+      }
+    }
+
+    const sessionId = randomUUID();
+    const storedSession: StoredWrapSession = {
+      sessionId,
+      generatedAt,
+      source,
+      data: {
+        ...data,
+        sessionId,
+      },
+    };
+
+    const stored = await saveSession(storedSession);
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: storedSession.data,
+        metadata: {
+          generatedAt,
+          source,
+          stored,
+        },
+      },
+      { headers }
+    );
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : 'Failed to generate wrap concepts',
+      },
+      { status: 500, headers }
+    );
+  }
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: getCorsHeaders(request),
+  });
+}
+
+async function generateAiConcepts(
+  request: WrapDesignRequest,
+  configuredSalesEmail?: string
+): Promise<WrapDesignSessionData> {
+  const OpenAI = (await import('openai')).default;
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const fallback = createFallbackConcepts(request, configuredSalesEmail);
+
+  const response = await client.chat.completions.create({
+    model: 'gpt-4o-mini',
+    response_format: { type: 'json_object' },
+    messages: [
+      {
+        role: 'system',
+        content:
+          'You create premium vehicle wrap design concepts. Return valid JSON with a "concepts" array of exactly 3 items. Each concept must include title, headline, rationale, graphics (array of 3 short strings), layout, premiumFeature, and palette (array of exactly 3 hex colors).',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          companyName: request.companyName,
+          industry: request.industry,
+          vehicleType: request.vehicleType,
+          preferredColors: request.preferredColors,
+          designDirection: request.designDirection,
+          tagline: request.tagline || '',
+          goals: request.goals || '',
+        }),
+      },
+    ],
+    max_tokens: 1200,
+  });
+
+  const content = response.choices[0]?.message.content;
+
+  if (!content) {
+    return fallback;
+  }
+
+  let parsed: { concepts?: Array<Record<string, unknown>> } = {};
+
+  try {
+    parsed = JSON.parse(content) as { concepts?: Array<Record<string, unknown>> };
+  } catch {
+    return fallback;
+  }
+
+  const concepts = (parsed.concepts || []).slice(0, 3).map((concept, index) => {
+    const fallbackConcept = fallback.concepts[index] || fallback.concepts[0];
+    const palette = normalizePalette(concept.palette, fallbackConcept.palette);
+    const title = asString(concept.title, fallbackConcept.title);
+    const headline = asString(concept.headline, fallbackConcept.headline);
+
+    return {
+      ...fallbackConcept,
+      title,
+      headline,
+      rationale: asString(concept.rationale, fallbackConcept.rationale),
+      graphics: normalizeStringArray(concept.graphics, fallbackConcept.graphics, 3),
+      layout: asString(concept.layout, fallbackConcept.layout),
+      premiumFeature: asString(concept.premiumFeature, fallbackConcept.premiumFeature),
+      palette,
+      mockupImage: createVehicleMockup(fallback.selectedVehicle.id, palette, request.companyName, headline),
+      mockupThumbnail: createVehicleMockup(fallback.selectedVehicle.id, palette, request.companyName, title, true),
+    };
+  });
+
+  return {
+    ...fallback,
+    concepts,
+    gallery: concepts.map((concept) => ({
+      id: concept.id,
+      title: concept.title,
+      description: concept.headline,
+      image: concept.mockupThumbnail,
+    })),
+  };
+}
+
+async function saveSession(session: StoredWrapSession) {
+  try {
+    await mkdir(SESSIONS_DIRECTORY, { recursive: true });
+    await writeFile(getSessionFilePath(session.sessionId), JSON.stringify(session, null, 2), 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readSession(sessionId: string) {
+  try {
+    const file = await readFile(getSessionFilePath(sessionId), 'utf8');
+    return JSON.parse(file) as StoredWrapSession;
+  } catch {
+    return null;
+  }
+}
+
+function asString(value: unknown, fallback: string) {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function normalizeStringArray(value: unknown, fallback: string[], limit: number) {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  const normalized = value
+    .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+    .map((entry) => entry.trim())
+    .slice(0, limit);
+
+  return normalized.length === limit ? normalized : fallback;
+}
+
+function normalizePalette(value: unknown, fallback: string[]) {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  const palette = value
+    .filter((entry): entry is string => typeof entry === 'string' && /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(entry))
+    .slice(0, 3);
+
+  return palette.length === 3 ? palette : fallback;
+}
+
+function getSessionFilePath(sessionId: string) {
+  const fileId = createHash('sha256').update(sessionId).digest('hex');
+  return path.join(SESSIONS_DIRECTORY, `${fileId}.json`);
 }

@@ -7,12 +7,14 @@ import { generateWrapConcept } from '@/lib/wrap-concept-client';
 
 export async function testWrapConceptAPI() {
   const testParams = {
-    vehicleType: 'van',
-    designDirection:
-      'Modern, minimalist design with geometric patterns. Use company colors blue and white. Include the logo prominently on the side.',
+    vehicleType: 'cargo-van',
+    designDirection: 'Modern, minimalist design with geometric patterns and strong roadside readability.',
     companyName: 'TechFlow Solutions',
     contactEmail: 'design@techflow.com',
-    revisionNotes: 'Make it more vibrant and add more brand personality',
+    industry: 'Commercial HVAC',
+    preferredColors: 'Blue, white, silver',
+    goals: 'Make it feel premium enough to support a premium upsell.',
+    tagline: 'Fast comfort. Trusted crews.',
   };
 
   console.log('Testing Wrap Concept API with params:', testParams);
@@ -24,9 +26,10 @@ export async function testWrapConceptAPI() {
     );
 
     console.log('✅ API Response:', result);
-    console.log('📸 Image URL:', result.data.imageUrl);
-    console.log('📝 Title:', result.data.conceptTitle);
-    console.log('💡 Rationale:', result.data.creativRationale);
+    console.log('🧾 Session ID:', result.data.sessionId);
+    console.log('🚐 Vehicle:', result.data.selectedVehicle.label);
+    console.log('📝 Title:', result.data.concepts[0]?.title);
+    console.log('💡 Rationale:', result.data.concepts[0]?.rationale);
 
     return result;
   } catch (error) {
