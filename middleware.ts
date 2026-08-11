@@ -6,9 +6,6 @@ const PUBLIC_PATHS = new Set([
   '/design-studio',
   '/client-onboard',
   '/client-onboard/register',
-  '/driver-onboard',
-  '/driver-onboard/status',
-  '/wrap-lab',
 ]);
 
 function getAllowedRoles(pathname: string): readonly SessionRole[] | null {
@@ -37,10 +34,12 @@ export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const allowedRoles = getAllowedRoles(pathname);
 
+  // If no auth is required for this path, allow it through
   if (!allowedRoles || PUBLIC_PATHS.has(pathname)) {
     return NextResponse.next();
   }
 
+  // Check if user has a valid session
   const session = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
 
   if (!session) {
@@ -54,6 +53,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
+  // Verify user has required role
   if (!allowedRoles.includes(session.role)) {
     return NextResponse.redirect(new URL('/', request.url));
   }
@@ -65,9 +65,8 @@ export const config = {
   matcher: [
     '/hr-operations/:path*',
     '/design-studio/:path*',
-    '/client-onboard/:path*',
+    '/client-onboard/projects/:path*',
     '/admin/driver-codes/:path*',
     '/admin/settings/:path*',
-    '/driver-onboard/:path*',
   ],
 };
