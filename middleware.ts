@@ -1,0 +1,83 @@
+import { clerkMiddleware } from '@clerk/nextjs/server';
+import { NextResponse, type NextRequest } from 'next/server';
+import { SESSION_COOKIE, type SessionRole, verifySessionToken } from '@/lib/ops-session';
+
+const PUBLIC_PATHS = new Set([
+  '/hr-operations',
+  '/design-studio',
+  '/client-onboard',
+  '/client-onboard/register',
+]);
+
+function getAllowedRoles(pathname: string): readonly SessionRole[] | null {
+  if (pathname.startsWith('/admin/settings')) {
+    return ['hr-manager'] as const;
+  }
+  if (pathname.startsWith('/admin/driver-codes')) {
+    return ['hr-manager', 'hr-recruiter'] as const;
+  }
+  if (pathname.startsWith('/hr-operations/payroll')) {
+    return ['hr-manager'] as const;
+  }
+  if (pathname.startsWith('/hr-operations')) {
+    return ['hr-manager', 'hr-recruiter'] as const;
+  }
+  if (pathname.startsWith('/design-studio')) {
+    return ['design-team'] as const;
+  }
+  if (pathname.startsWith('/client-onboard/projects')) {
+    return ['client'] as const;
+  }
+  return null;
+}
+
+async function opsMiddleware(request: NextRequest) {
+  const { pathname, search } = request.nextUrl;
+  const allowedRoles = getAllowedRoles(pathname);
+
+  // If no auth is required for this path, allow it through
+  if (!allowedRoles || PUBLIC_PATHS.has(pathname)) {
+    return NextResponse.next();
+  }
+
+  // Check if user has a valid session
+  const session = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
+
+  if (!session) {
+    const redirectUrl = new URL('/client-onboard', request.url);
+    if (pathname.startsWith('/hr-operations') || pathname.startsWith('/admin/settings') || pathname.startsWith('/admin/driver-codes')) {
+      redirectUrl.pathname = '/hr-operations';
+    } else if (pathname.startsWith('/design-studio')) {
+      redirectUrl.pathname = '/design-studio';
+    }
+    redirectUrl.searchParams.set('redirect', `${pathname}${search}`);
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  // Verify user has required role
+  if (!allowedRoles.includes(session.role)) {
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
+  return NextResponse.next();
+}
+
+export default clerkMiddleware(async (_auth, request) => {
+  return opsMiddleware(request);
+});
+
+export const config = {
+  matcher: [
+    // Clerk proxy and API routes
+    '/(api|trpc)(.*)',
+    '/__clerk/:path*',
+    // Ops role-based routes
+    '/hr-operations/:path*',
+    '/design-studio/:path*',
+    '/client-onboard/projects/:path*',
+    '/admin/driver-codes/:path*',
+    '/admin/settings/:path*',
+    // Exclude static assets and Next internals
+    '/((?!_next/static|_next/image|favicon.ico).*)',
+  ],
+};

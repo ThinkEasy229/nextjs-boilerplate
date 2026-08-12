@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { ClerkProvider } from '@clerk/nextjs';
+import Nav from '@/components/Nav';
 
 export const metadata: Metadata = {
-  title: 'Vehicle Wrap Designer',
-  description: 'Premium AI-assisted vehicle wrap designer with real-time previews and sales handoff.',
+  title: 'Think Easy Agency',
+  description: 'Professional promo agency tools with HR operations, design studio, client onboarding, and driver workflows.',
 };
 
 export default function RootLayout({
@@ -12,8 +14,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
-      <body className="min-h-full bg-slate-950 text-white">{children}</body>
-    </html>
+    <ClerkProvider>
+      <html lang="en" className="h-full antialiased">
+        <body className="min-h-full bg-slate-950 text-white">
+          <Nav />
+          {children}
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

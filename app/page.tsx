@@ -1,11 +1,12 @@
 'use client';
 
-import type { FormEvent, HTMLInputTypeAttribute } from 'react';
+import type { FormEvent, HTMLInputTypeAttribute, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { generateWrapConcept, validateWrapConceptParams } from '@/lib/wrap-concept-client';
 import {
   createFallbackConcepts,
   getSalesContact,
+  normalizeActionUrl,
   PREMIUM_PACKAGE,
   VEHICLE_LIBRARY,
   type WrapDesignRequest,
@@ -13,6 +14,9 @@ import {
 
 const initialForm: WrapDesignRequest = {
   vehicleType: VEHICLE_LIBRARY[0].id,
+  vehicleYear: '',
+  vehicleMake: '',
+  vehicleModel: '',
   companyName: '',
   contactEmail: '',
   industry: '',
@@ -29,10 +33,16 @@ export default function Home() {
   const [selectedConceptIndex, setSelectedConceptIndex] = useState(0);
   const [result, setResult] = useState<Awaited<ReturnType<typeof generateWrapConcept>> | null>(null);
 
-  const salesContact = getSalesContact(process.env.NEXT_PUBLIC_SALES_EMAIL);
+  const salesContact = useMemo(
+    () => getSalesContact(process.env.NEXT_PUBLIC_SALES_EMAIL, process.env.NEXT_PUBLIC_SALES_URL),
+    []
+  );
   const previewRequest = useMemo<WrapDesignRequest>(
     () => ({
       vehicleType: form.vehicleType,
+      vehicleYear: form.vehicleYear || '2024',
+      vehicleMake: form.vehicleMake || 'Ford',
+      vehicleModel: form.vehicleModel || 'Transit',
       companyName: form.companyName || 'Your Company',
       contactEmail: form.contactEmail || 'brand@example.com',
       industry: form.industry || 'Commercial services',
@@ -45,17 +55,31 @@ export default function Home() {
     [form]
   );
   const previewSession = useMemo(
-    () => createFallbackConcepts(previewRequest, salesContact.salesEmail),
-    [previewRequest, salesContact.salesEmail]
+    () => createFallbackConcepts(previewRequest, salesContact.salesEmail, salesContact.salesUrl),
+    [previewRequest, salesContact.salesEmail, salesContact.salesUrl]
   );
-  const activeSession = result?.data ?? previewSession;
-  const selectedConcept = activeSession.concepts[selectedConceptIndex] ?? activeSession.concepts[0];
-  const selectedVehicle = activeSession.selectedVehicle;
+  const selectedConcept = previewSession.concepts?.[selectedConceptIndex] ?? previewSession.concepts?.[0];
+  const selectedVehicle = result?.data.selectedVehicle ?? previewSession.selectedVehicle;
+  const vehicleSpecs = result?.data.vehicleSpecs ?? previewSession.vehicleSpecs;
+  const creativeDirections = result?.data.creativeDirections ?? previewSession.creativeDirections;
+  const displayImageUrl = result?.data.imageUrl ?? selectedConcept?.mockupImage ?? previewSession.imageUrl;
+  const activeContact = result?.data.contact ?? previewSession.contact;
   const canGenerate = validateWrapConceptParams(form);
-  const contactHref = `${activeSession.contact.salesMailto}&body=${encodeURIComponent(
-    `Company: ${form.companyName}\nVehicle: ${selectedVehicle.label}\nConcept: ${selectedConcept.title}\nNotes: ${form.designDirection}`
-  )}`;
-  const purchaseHref = process.env.NEXT_PUBLIC_PREMIUM_CHECKOUT_URL || contactHref;
+  const checkoutUrl = normalizeActionUrl(process.env.NEXT_PUBLIC_PREMIUM_CHECKOUT_URL);
+  const purchaseLabel = checkoutUrl ? 'Purchase premium concept' : 'Checkout unavailable';
+  const salesHref = activeContact.salesUrl;
+  const missingActionUrls = !checkoutUrl || !salesHref;
+  const hasBackupContact = Boolean(activeContact.salesEmail || activeContact.salesPhone);
+  const showBackupContactOptions = hasBackupContact && !salesHref;
+  const fallbackMessage = !checkoutUrl && !salesHref
+    ? showBackupContactOptions
+      ? 'Checkout and sales links are unavailable right now. Use the backup contact options below.'
+      : 'Checkout and sales links are currently unavailable.'
+    : !checkoutUrl
+      ? 'Checkout link unavailable right now.'
+      : showBackupContactOptions
+        ? 'Sales link unavailable. Use the backup contact options below.'
+        : 'Sales link unavailable right now.';
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -84,7 +108,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
+    <main className="min-h-screen bg-slate-950 text-white pt-14">
       <section className="mx-auto flex w-full max-w-7xl flex-col gap-10 px-6 py-8 lg:px-10 xl:px-12">
         <div className="grid gap-6 rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl shadow-slate-950/30 lg:grid-cols-[1.1fr_0.9fr] lg:p-8">
           <div className="space-y-6">
@@ -141,7 +165,25 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-3">
+                <Field
+                  label="Vehicle year"
+                  value={form.vehicleYear}
+                  placeholder="2024"
+                  onChange={(value) => setForm((current) => ({ ...current, vehicleYear: value }))}
+                />
+                <Field
+                  label="Vehicle make"
+                  value={form.vehicleMake}
+                  placeholder="Ford"
+                  onChange={(value) => setForm((current) => ({ ...current, vehicleMake: value }))}
+                />
+                <Field
+                  label="Vehicle model"
+                  value={form.vehicleModel}
+                  placeholder="Transit"
+                  onChange={(value) => setForm((current) => ({ ...current, vehicleModel: value }))}
+                />
                 <Field
                   label="Company name"
                   value={form.companyName}
@@ -194,12 +236,13 @@ export default function Home() {
                   <p className="text-sm text-slate-400">{PREMIUM_PACKAGE.turnaround}</p>
                 </div>
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <a
-                    href={contactHref}
+                  <ActionLink
+                    href={salesHref}
                     className="inline-flex items-center justify-center rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white transition hover:border-white/40"
+                    fallbackClassName="inline-flex items-center justify-center rounded-full border border-white/10 px-5 py-3 text-sm font-semibold text-slate-500"
                   >
                     Talk with sales instead
-                  </a>
+                  </ActionLink>
                   <button
                     type="submit"
                     disabled={!canGenerate || isGenerating}
@@ -217,54 +260,92 @@ export default function Home() {
             <div className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-slate-900 via-slate-950 to-cyan-950/60 p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm uppercase tracking-[0.24em] text-cyan-200">Real-time preview</p>
-                  <h2 className="mt-2 text-2xl font-semibold text-white">{selectedConcept.title}</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">{selectedConcept.headline}</p>
+                  <p className="text-sm uppercase tracking-[0.24em] text-cyan-200">
+                    {result ? 'OpenAI vehicle wrap render' : 'Real-time preview'}
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">
+                    {vehicleSpecs.vehicleYear} {vehicleSpecs.vehicleMake} {vehicleSpecs.vehicleModel}
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">
+                    {result
+                      ? `Generated wrap concept for ${form.companyName || 'your company'} on a ${selectedVehicle.label.toLowerCase()}.`
+                      : selectedConcept?.headline}
+                  </p>
                 </div>
                 <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
-                  {result ? 'AI session ready' : 'Live preview'}
+                  {result ? 'AI image ready' : 'Live preview'}
                 </span>
               </div>
 
               <div className="mt-5 overflow-hidden rounded-[1.5rem] border border-white/10 bg-white">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={selectedConcept.mockupImage}
-                  alt={`${selectedVehicle.label} wrap preview for ${form.companyName}`}
+                  src={displayImageUrl}
+                  alt={`${vehicleSpecs.vehicleYear} ${vehicleSpecs.vehicleMake} ${vehicleSpecs.vehicleModel} wrap preview for ${form.companyName || 'your company'}`}
                   className="h-auto w-full"
                 />
               </div>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                {selectedConcept.palette.map((color) => (
-                  <div key={color} className="rounded-2xl border border-white/10 bg-slate-900/70 p-3">
-                    <div className="h-8 rounded-xl" style={{ backgroundColor: color }} />
-                    <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">{color}</p>
-                  </div>
-                ))}
+              <div className="mt-5 grid gap-3 sm:grid-cols-4">
+                <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Vehicle type</p>
+                  <p className="mt-2 text-sm font-medium text-white">{selectedVehicle.label}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Year</p>
+                  <p className="mt-2 text-sm font-medium text-white">{vehicleSpecs.vehicleYear}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Make</p>
+                  <p className="mt-2 text-sm font-medium text-white">{vehicleSpecs.vehicleMake}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Model</p>
+                  <p className="mt-2 text-sm font-medium text-white">{vehicleSpecs.vehicleModel}</p>
+                </div>
               </div>
 
-              <div className="mt-5 grid gap-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
-                <div>
-                  <p className="text-sm font-semibold text-white">Layout strategy</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">{selectedConcept.layout}</p>
+              {result ? (
+                <div className="mt-5 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                  <p className="text-sm font-semibold text-white">Primary direction used for the render</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">{creativeDirections[0]}</p>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">Why this sells</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">{selectedConcept.rationale}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">Premium upsell</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">{selectedConcept.premiumFeature}</p>
-                </div>
-              </div>
+              ) : selectedConcept ? (
+                <>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    {selectedConcept.palette.map((color) => (
+                      <div key={color} className="rounded-2xl border border-white/10 bg-slate-900/70 p-3">
+                        <div className="h-8 rounded-xl" style={{ backgroundColor: color }} />
+                        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">{color}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-5 grid gap-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                    <div>
+                      <p className="text-sm font-semibold text-white">Layout strategy</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">{selectedConcept.layout}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Why this sells</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">{selectedConcept.rationale}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Premium upsell</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">{selectedConcept.premiumFeature}</p>
+                    </div>
+                  </div>
+                </>
+              ) : null}
             </div>
 
             <div className="rounded-[2rem] border border-white/10 bg-slate-900/60 p-5">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-sm uppercase tracking-[0.24em] text-slate-400">3. Review the design gallery</p>
-                  <h3 className="mt-2 text-2xl font-semibold text-white">Template options built for this brief</h3>
+                  <p className="text-sm uppercase tracking-[0.24em] text-slate-400">3. Review the creative directions</p>
+                  <h3 className="mt-2 text-2xl font-semibold text-white">
+                    {result ? 'Three written directions returned by GPT-4' : 'Preview directions built for this brief'}
+                  </h3>
                 </div>
                 {result?.metadata.source ? (
                   <span className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
@@ -274,26 +355,35 @@ export default function Home() {
               </div>
 
               <div className="mt-5 grid gap-3">
-                {activeSession.gallery.map((concept, index) => {
-                  const isSelected = selectedConcept.id === concept.id;
+                {creativeDirections.map((direction, index) => {
+                  const isSelected = index === selectedConceptIndex;
+
+                  if (result) {
+                    return (
+                      <div key={direction} className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-base font-semibold text-white">Direction {index + 1}</p>
+                          <span className="text-xs uppercase tracking-[0.2em] text-slate-400">GPT-4</span>
+                        </div>
+                        <p className="mt-3 text-sm leading-6 text-slate-300">{direction}</p>
+                      </div>
+                    );
+                  }
+
                   return (
                     <button
-                      key={concept.id}
+                      key={direction}
                       type="button"
                       onClick={() => setSelectedConceptIndex(index)}
-                      className={`grid gap-4 rounded-2xl border p-3 text-left transition sm:grid-cols-[140px_1fr] ${
+                      className={`rounded-2xl border p-4 text-left transition ${
                         isSelected ? 'border-cyan-400 bg-cyan-400/10' : 'border-white/10 hover:border-white/30'
                       }`}
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={concept.image} alt={concept.title} className="w-full rounded-xl border border-white/10 bg-white" />
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-base font-semibold text-white">{concept.title}</p>
-                          <span className="text-xs uppercase tracking-[0.2em] text-slate-400">Option {index + 1}</span>
-                        </div>
-                        <p className="text-sm leading-6 text-slate-300">{concept.description}</p>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-base font-semibold text-white">Direction {index + 1}</p>
+                        <span className="text-xs uppercase tracking-[0.2em] text-slate-400">Preview</span>
                       </div>
+                      <p className="mt-3 text-sm leading-6 text-slate-300">{direction}</p>
                     </button>
                   );
                 })}
@@ -307,23 +397,68 @@ export default function Home() {
                   Move straight into the premium design service or route this lead to your sales team for a human-led consult.
                 </p>
               </div>
-              <a
-                href={purchaseHref}
+              <ActionLink
+                href={checkoutUrl}
                 className="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-200"
+                fallbackClassName="inline-flex items-center justify-center rounded-full bg-slate-800 px-5 py-3 text-sm font-semibold text-slate-300"
               >
-                Purchase premium concept
-              </a>
-              <a
-                href={contactHref}
+                {purchaseLabel}
+              </ActionLink>
+              <ActionLink
+                href={salesHref}
                 className="inline-flex items-center justify-center rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white transition hover:border-white/40"
+                fallbackClassName="inline-flex items-center justify-center rounded-full border border-white/10 px-5 py-3 text-sm font-semibold text-slate-500"
               >
                 Contact sales
-              </a>
+              </ActionLink>
+              {missingActionUrls ? (
+                <div className="md:col-span-3">
+                  <p className="text-sm text-slate-400">{fallbackMessage}</p>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm text-slate-300">
+                    {showBackupContactOptions && activeContact.salesEmail && activeContact.salesMailto ? (
+                      <a className="underline decoration-white/20 underline-offset-4" href={activeContact.salesMailto}>
+                        Email sales
+                      </a>
+                    ) : null}
+                    {showBackupContactOptions && activeContact.salesPhone && activeContact.salesPhoneHref ? (
+                      <a className="underline decoration-white/20 underline-offset-4" href={activeContact.salesPhoneHref}>
+                        Call {activeContact.salesPhone}
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
       </section>
     </main>
+  );
+}
+
+function ActionLink({
+  href,
+  className,
+  fallbackClassName,
+  children,
+}: {
+  href: string | null;
+  className: string;
+  fallbackClassName: string;
+  children: ReactNode;
+}) {
+  if (!href) {
+    return (
+      <button className={fallbackClassName} disabled type="button">
+        {children}
+      </button>
+    );
+  }
+
+  return (
+    <a className={className} href={href}>
+      {children}
+    </a>
   );
 }
 
