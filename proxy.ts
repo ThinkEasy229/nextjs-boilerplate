@@ -1,6 +1,32 @@
-import { clerkMiddleware } from '@clerk/nextjs/server'
+import { clerkMiddleware } from '@clerk/nextjs/server';
 
-export default clerkMiddleware()
+function normalizeClerkEnv(value: string | undefined) {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    const unwrapped = trimmed.slice(1, -1).trim();
+    return unwrapped || undefined;
+  }
+
+  return trimmed || undefined;
+}
+
+const publishableKey = normalizeClerkEnv(
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY
+);
+const secretKey = normalizeClerkEnv(process.env.CLERK_SECRET_KEY);
+
+export default clerkMiddleware({
+  publishableKey,
+  secretKey,
+});
 
 export const config = {
   matcher: [
@@ -8,4 +34,4 @@ export const config = {
     '/(api|trpc)(.*)',
     '/__clerk/:path*',
   ],
-}
+};
