@@ -69,19 +69,11 @@ export default function Home() {
   const purchaseHref = checkoutUrl ?? activeContact.salesUrl;
   const purchaseLabel = checkoutUrl ? 'Purchase premium concept' : activeContact.salesUrl ? 'Talk with sales to purchase' : 'Checkout unavailable';
   const salesHref = activeContact.salesUrl;
-  const missingActionUrls = !checkoutUrl || !salesHref;
+  const missingActionUrls = !purchaseHref && !salesHref;
   const hasBackupContact = Boolean(activeContact.salesEmail || activeContact.salesPhone);
-  const fallbackMessage = !checkoutUrl && !salesHref
-    ? hasBackupContact
-      ? 'Checkout and sales links are unavailable right now. Use the backup contact options below.'
-      : 'Checkout and sales links are currently unavailable.'
-    : !checkoutUrl
-      ? hasBackupContact
-        ? 'Checkout link unavailable. Use the sales button or backup contact options.'
-        : 'Checkout link unavailable right now.'
-      : hasBackupContact
-        ? 'Sales link unavailable. Use the backup contact options below.'
-        : 'Sales link unavailable right now.';
+  const fallbackMessage = hasBackupContact
+    ? 'Checkout and sales links are unavailable right now. Use the backup contact options below.'
+    : 'Checkout and sales links are currently unavailable.';
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
