@@ -1,11 +1,12 @@
 'use client';
 
-import type { FormEvent, HTMLInputTypeAttribute } from 'react';
+import type { FormEvent, HTMLInputTypeAttribute, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { generateWrapConcept, validateWrapConceptParams } from '@/lib/wrap-concept-client';
 import {
   createFallbackConcepts,
   getSalesContact,
+  normalizeActionUrl,
   PREMIUM_PACKAGE,
   VEHICLE_LIBRARY,
   type WrapDesignRequest,
@@ -32,7 +33,10 @@ export default function Home() {
   const [selectedConceptIndex, setSelectedConceptIndex] = useState(0);
   const [result, setResult] = useState<Awaited<ReturnType<typeof generateWrapConcept>> | null>(null);
 
-  const salesContact = getSalesContact(process.env.NEXT_PUBLIC_SALES_EMAIL);
+  const salesContact = useMemo(
+    () => getSalesContact(process.env.NEXT_PUBLIC_SALES_EMAIL, process.env.NEXT_PUBLIC_SALES_URL),
+    []
+  );
   const previewRequest = useMemo<WrapDesignRequest>(
     () => ({
       vehicleType: form.vehicleType,
@@ -51,8 +55,8 @@ export default function Home() {
     [form]
   );
   const previewSession = useMemo(
-    () => createFallbackConcepts(previewRequest, salesContact.salesEmail),
-    [previewRequest, salesContact.salesEmail]
+    () => createFallbackConcepts(previewRequest, salesContact.salesEmail, salesContact.salesUrl),
+    [previewRequest, salesContact.salesEmail, salesContact.salesUrl]
   );
   const selectedConcept = previewSession.concepts?.[selectedConceptIndex] ?? previewSession.concepts?.[0];
   const selectedVehicle = result?.data.selectedVehicle ?? previewSession.selectedVehicle;
@@ -61,10 +65,21 @@ export default function Home() {
   const displayImageUrl = result?.data.imageUrl ?? selectedConcept?.mockupImage ?? previewSession.imageUrl;
   const activeContact = result?.data.contact ?? previewSession.contact;
   const canGenerate = validateWrapConceptParams(form);
-  const contactHref = `${activeContact.salesMailto}&body=${encodeURIComponent(
-    `Company: ${form.companyName}\nVehicle: ${vehicleSpecs.vehicleYear} ${vehicleSpecs.vehicleMake} ${vehicleSpecs.vehicleModel} (${selectedVehicle.label})\nNotes: ${form.designDirection}`
-  )}`;
-  const purchaseHref = process.env.NEXT_PUBLIC_PREMIUM_CHECKOUT_URL || contactHref;
+  const checkoutUrl = normalizeActionUrl(process.env.NEXT_PUBLIC_PREMIUM_CHECKOUT_URL);
+  const purchaseLabel = checkoutUrl ? 'Purchase premium concept' : 'Checkout unavailable';
+  const salesHref = activeContact.salesUrl;
+  const missingActionUrls = !checkoutUrl || !salesHref;
+  const hasBackupContact = Boolean(activeContact.salesEmail || activeContact.salesPhone);
+  const showBackupContactOptions = hasBackupContact && !salesHref;
+  const fallbackMessage = !checkoutUrl && !salesHref
+    ? showBackupContactOptions
+      ? 'Checkout and sales links are unavailable right now. Use the backup contact options below.'
+      : 'Checkout and sales links are currently unavailable.'
+    : !checkoutUrl
+      ? 'Checkout link unavailable right now.'
+      : showBackupContactOptions
+        ? 'Sales link unavailable. Use the backup contact options below.'
+        : 'Sales link unavailable right now.';
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -221,12 +236,13 @@ export default function Home() {
                   <p className="text-sm text-slate-400">{PREMIUM_PACKAGE.turnaround}</p>
                 </div>
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <a
-                    href={contactHref}
+                  <ActionLink
+                    href={salesHref}
                     className="inline-flex items-center justify-center rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white transition hover:border-white/40"
+                    fallbackClassName="inline-flex items-center justify-center rounded-full border border-white/10 px-5 py-3 text-sm font-semibold text-slate-500"
                   >
                     Talk with sales instead
-                  </a>
+                  </ActionLink>
                   <button
                     type="submit"
                     disabled={!canGenerate || isGenerating}
@@ -381,23 +397,68 @@ export default function Home() {
                   Move straight into the premium design service or route this lead to your sales team for a human-led consult.
                 </p>
               </div>
-              <a
-                href={purchaseHref}
+              <ActionLink
+                href={checkoutUrl}
                 className="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-200"
+                fallbackClassName="inline-flex items-center justify-center rounded-full bg-slate-800 px-5 py-3 text-sm font-semibold text-slate-300"
               >
-                Purchase premium concept
-              </a>
-              <a
-                href={contactHref}
+                {purchaseLabel}
+              </ActionLink>
+              <ActionLink
+                href={salesHref}
                 className="inline-flex items-center justify-center rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white transition hover:border-white/40"
+                fallbackClassName="inline-flex items-center justify-center rounded-full border border-white/10 px-5 py-3 text-sm font-semibold text-slate-500"
               >
                 Contact sales
-              </a>
+              </ActionLink>
+              {missingActionUrls ? (
+                <div className="md:col-span-3">
+                  <p className="text-sm text-slate-400">{fallbackMessage}</p>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm text-slate-300">
+                    {showBackupContactOptions && activeContact.salesEmail && activeContact.salesMailto ? (
+                      <a className="underline decoration-white/20 underline-offset-4" href={activeContact.salesMailto}>
+                        Email sales
+                      </a>
+                    ) : null}
+                    {showBackupContactOptions && activeContact.salesPhone && activeContact.salesPhoneHref ? (
+                      <a className="underline decoration-white/20 underline-offset-4" href={activeContact.salesPhoneHref}>
+                        Call {activeContact.salesPhone}
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
       </section>
     </main>
+  );
+}
+
+function ActionLink({
+  href,
+  className,
+  fallbackClassName,
+  children,
+}: {
+  href: string | null;
+  className: string;
+  fallbackClassName: string;
+  children: ReactNode;
+}) {
+  if (!href) {
+    return (
+      <button className={fallbackClassName} disabled type="button">
+        {children}
+      </button>
+    );
+  }
+
+  return (
+    <a className={className} href={href}>
+      {children}
+    </a>
   );
 }
 

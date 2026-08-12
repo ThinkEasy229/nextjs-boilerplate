@@ -29,8 +29,10 @@ Required for AI concepts:
 Optional:
 
 - `FRAMER_ORIGIN` for CORS when embedding from Framer
-- `NEXT_PUBLIC_SALES_EMAIL` / `SALES_EMAIL` for the contact-sales CTA
+- `NEXT_PUBLIC_SALES_EMAIL` / `SALES_EMAIL` for backup sales email contact
 - `NEXT_PUBLIC_SALES_PHONE` for the displayed sales phone number
+- `NEXT_PUBLIC_SALES_URL` / `SALES_URL` for the human-led sales consult link
+- `NEXT_PUBLIC_PREMIUM_CHECKOUT_URL` for the premium concept checkout link
 
 ## Operations portals
 
