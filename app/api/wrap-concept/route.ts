@@ -199,7 +199,10 @@ export async function GET(req: NextRequest) {
       data: {
         availableVehicles: VEHICLE_LIBRARY,
         premiumPackage: PREMIUM_PACKAGE,
-        contact: getSalesContact(process.env.SALES_EMAIL || process.env.NEXT_PUBLIC_SALES_EMAIL),
+        contact: getSalesContact(
+          process.env.SALES_EMAIL || process.env.NEXT_PUBLIC_SALES_EMAIL,
+          process.env.SALES_URL || process.env.NEXT_PUBLIC_SALES_URL
+        ),
       },
     },
     200,
@@ -240,7 +243,8 @@ export async function POST(req: NextRequest) {
   const normalizedBody = normalizeRequest(body as WrapDesignRequest);
   const fallbackSession = createFallbackConcepts(
     normalizedBody,
-    process.env.SALES_EMAIL || process.env.NEXT_PUBLIC_SALES_EMAIL
+    process.env.SALES_EMAIL || process.env.NEXT_PUBLIC_SALES_EMAIL,
+    process.env.SALES_URL || process.env.NEXT_PUBLIC_SALES_URL
   );
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 

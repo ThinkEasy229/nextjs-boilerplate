@@ -15,10 +15,11 @@ export interface PremiumPackage {
 }
 
 export interface SalesContact {
-  salesEmail: string;
-  salesMailto: string;
-  salesPhone: string;
-  salesPhoneHref: string;
+  salesEmail: string | null;
+  salesMailto: string | null;
+  salesPhone: string | null;
+  salesPhoneHref: string | null;
+  salesUrl: string | null;
 }
 
 export interface WrapDesignRequest {
@@ -156,16 +157,39 @@ export const PREMIUM_PACKAGE: PremiumPackage = {
   ],
 };
 
-export function getSalesContact(configuredEmail?: string): SalesContact {
-  const salesEmail = configuredEmail || 'sales@example.com';
-  const salesPhone = process.env.NEXT_PUBLIC_SALES_PHONE || '(555) 010-2026';
-  const salesPhoneHref = `tel:${salesPhone.replaceAll(/[^+\d]/g, '') || '+15550102026'}`;
+export function normalizeActionUrl(configuredUrl?: string | null) {
+  const trimmedUrl = configuredUrl?.trim();
+
+  if (!trimmedUrl) {
+    return null;
+  }
+
+  if (trimmedUrl.startsWith('/')) {
+    return trimmedUrl;
+  }
+
+  try {
+    const url = new URL(trimmedUrl);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? trimmedUrl : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getSalesContact(configuredEmail?: string | null, configuredSalesUrl?: string | null): SalesContact {
+  const salesEmail = configuredEmail?.trim() && isLikelyEmail(configuredEmail.trim()) ? configuredEmail.trim() : null;
+  const rawSalesPhone = process.env.NEXT_PUBLIC_SALES_PHONE?.trim();
+  const cleanedPhone = rawSalesPhone?.replaceAll(/[^+\d]/g, '') ?? '';
+  const salesPhone = rawSalesPhone || null;
+  const salesPhoneHref = cleanedPhone ? `tel:${cleanedPhone}` : null;
+  const salesUrl = normalizeActionUrl(configuredSalesUrl);
 
   return {
     salesEmail,
-    salesMailto: `mailto:${salesEmail}?subject=Vehicle%20Wrap%20Design%20Consultation`,
+    salesMailto: salesEmail ? `mailto:${salesEmail}?subject=Vehicle%20Wrap%20Design%20Consultation` : null,
     salesPhone,
     salesPhoneHref,
+    salesUrl,
   };
 }
 
@@ -238,10 +262,11 @@ export function validateWrapDesignRequest(payload: unknown): payload is WrapDesi
 
 export function createFallbackConcepts(
   request: WrapDesignRequest,
-  configuredSalesEmail?: string
+  configuredSalesEmail?: string | null,
+  configuredSalesUrl?: string | null
 ): WrapDesignSessionData {
   const selectedVehicle = getVehicleOption(request.vehicleType);
-  const contact = getSalesContact(configuredSalesEmail);
+  const contact = getSalesContact(configuredSalesEmail, configuredSalesUrl);
   const basePalette = resolvePalette(request.preferredColors);
   const companyName = request.companyName.trim();
   const focus = request.tagline?.trim() || request.designDirection.trim();
