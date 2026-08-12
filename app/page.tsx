@@ -66,8 +66,8 @@ export default function Home() {
   const activeContact = result?.data.contact ?? previewSession.contact;
   const canGenerate = validateWrapConceptParams(form);
   const checkoutUrl = normalizeActionUrl(process.env.NEXT_PUBLIC_PREMIUM_CHECKOUT_URL);
-  const purchaseHref = checkoutUrl ?? activeContact.salesUrl;
-  const purchaseLabel = checkoutUrl ? 'Purchase premium concept' : activeContact.salesUrl ? 'Talk with sales to purchase' : 'Checkout unavailable';
+  const purchaseHref = checkoutUrl;
+  const purchaseLabel = checkoutUrl ? 'Purchase premium concept' : 'Checkout unavailable';
   const salesHref = activeContact.salesUrl;
   const missingActionUrls = !purchaseHref && !salesHref;
   const hasBackupContact = Boolean(activeContact.salesEmail || activeContact.salesPhone);
