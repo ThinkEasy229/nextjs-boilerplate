@@ -67,13 +67,18 @@ export default function Home() {
   const purchaseLabel = checkoutUrl ? 'Purchase premium concept' : activeContact.salesUrl ? 'Talk with sales to purchase' : 'Checkout unavailable';
   const salesHref = activeContact.salesUrl;
   const missingActionUrls = !checkoutUrl || !salesHref;
+  const hasBackupContact = Boolean(activeContact.salesEmail || activeContact.salesPhone);
   const fallbackMessage = !checkoutUrl && !salesHref
-    ? activeContact.salesEmail || activeContact.salesPhone
+    ? hasBackupContact
       ? 'Checkout and sales links are unavailable right now. Use the backup contact options below.'
       : 'Checkout and sales links are currently unavailable.'
     : !checkoutUrl
-      ? 'Checkout link unavailable. Use the sales options below.'
-      : 'Sales link unavailable. Use the backup contact options below.';
+      ? hasBackupContact
+        ? 'Checkout link unavailable. Use the sales options below.'
+        : 'Checkout link unavailable right now.'
+      : hasBackupContact
+        ? 'Sales link unavailable. Use the backup contact options below.'
+        : 'Sales link unavailable right now.';
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -443,9 +448,9 @@ function ActionLink({
 }) {
   if (!href) {
     return (
-      <span aria-disabled="true" className={fallbackClassName} role="link">
+      <button className={fallbackClassName} disabled type="button">
         {children}
-      </span>
+      </button>
     );
   }
 
