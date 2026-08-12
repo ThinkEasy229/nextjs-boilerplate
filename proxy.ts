@@ -7,10 +7,7 @@ function normalizeClerkEnv(value: string | undefined) {
 
   const trimmed = value.trim();
 
-  if (
-    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-    (trimmed.startsWith("'") && trimmed.endsWith("'"))
-  ) {
+  if ((trimmed[0] === '"' || trimmed[0] === "'") && trimmed[0] === trimmed[trimmed.length - 1]) {
     const unwrapped = trimmed.slice(1, -1).trim();
     return unwrapped || undefined;
   }
