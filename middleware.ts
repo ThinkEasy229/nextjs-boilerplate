@@ -1,1 +1,1 @@
-// removed: use proxy.ts only
+delete middleware.ts; keep proxy.ts only
