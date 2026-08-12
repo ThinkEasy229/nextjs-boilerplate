@@ -33,7 +33,10 @@ export default function Home() {
   const [selectedConceptIndex, setSelectedConceptIndex] = useState(0);
   const [result, setResult] = useState<Awaited<ReturnType<typeof generateWrapConcept>> | null>(null);
 
-  const salesContact = getSalesContact(process.env.NEXT_PUBLIC_SALES_EMAIL, process.env.NEXT_PUBLIC_SALES_URL);
+  const salesContact = useMemo(
+    () => getSalesContact(process.env.NEXT_PUBLIC_SALES_EMAIL, process.env.NEXT_PUBLIC_SALES_URL),
+    []
+  );
   const previewRequest = useMemo<WrapDesignRequest>(
     () => ({
       vehicleType: form.vehicleType,
