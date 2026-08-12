@@ -1,3 +1,4 @@
+import { clerkMiddleware } from '@clerk/nextjs/server';
 import { NextResponse, type NextRequest } from 'next/server';
 import { SESSION_COOKIE, type SessionRole, verifySessionToken } from '@/lib/ops-session';
 
@@ -30,7 +31,7 @@ function getAllowedRoles(pathname: string): readonly SessionRole[] | null {
   return null;
 }
 
-export async function middleware(request: NextRequest) {
+async function opsMiddleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const allowedRoles = getAllowedRoles(pathname);
 
@@ -61,12 +62,22 @@ export async function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
+export default clerkMiddleware(async (_auth, request) => {
+  return opsMiddleware(request);
+});
+
 export const config = {
   matcher: [
+    // Clerk proxy and API routes
+    '/(api|trpc)(.*)',
+    '/__clerk/:path*',
+    // Ops role-based routes
     '/hr-operations/:path*',
     '/design-studio/:path*',
     '/client-onboard/projects/:path*',
     '/admin/driver-codes/:path*',
     '/admin/settings/:path*',
+    // Exclude static assets and Next internals
+    '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 };
