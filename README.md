@@ -22,6 +22,10 @@ Create a `.env.local` from `.env.example` if you want live OpenAI-generated conc
 cp .env.example .env.local
 ```
 
+If you are not enabling Clerk auth yet, leave the Clerk variables blank. Do not use placeholder strings such as
+`undefined`, `null`, `pk_test_replace_with_real_key`, or `sk_test_replace_with_real_key`. When you do enable Clerk,
+set both values to real keys from the Clerk dashboard.
+
 Required for AI concepts:
 
 - `OPENAI_API_KEY`
