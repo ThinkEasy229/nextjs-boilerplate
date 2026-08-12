@@ -77,7 +77,7 @@ export default function Home() {
       : 'Checkout and sales links are currently unavailable.'
     : !checkoutUrl
       ? hasBackupContact
-        ? 'Checkout link unavailable. Use the sales options below.'
+        ? 'Checkout link unavailable. Use the sales button or backup contact options.'
         : 'Checkout link unavailable right now.'
       : hasBackupContact
         ? 'Sales link unavailable. Use the backup contact options below.'
