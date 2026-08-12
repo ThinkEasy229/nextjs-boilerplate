@@ -66,14 +66,20 @@ export default function Home() {
   const activeContact = result?.data.contact ?? previewSession.contact;
   const canGenerate = validateWrapConceptParams(form);
   const checkoutUrl = normalizeActionUrl(process.env.NEXT_PUBLIC_PREMIUM_CHECKOUT_URL);
-  const purchaseHref = checkoutUrl;
   const purchaseLabel = checkoutUrl ? 'Purchase premium concept' : 'Checkout unavailable';
   const salesHref = activeContact.salesUrl;
-  const missingActionUrls = !purchaseHref && !salesHref;
+  const missingActionUrls = !checkoutUrl || !salesHref;
   const hasBackupContact = Boolean(activeContact.salesEmail || activeContact.salesPhone);
-  const fallbackMessage = hasBackupContact
-    ? 'Checkout and sales links are unavailable right now. Use the backup contact options below.'
-    : 'Checkout and sales links are currently unavailable.';
+  const showBackupContactOptions = hasBackupContact && !salesHref;
+  const fallbackMessage = !checkoutUrl && !salesHref
+    ? showBackupContactOptions
+      ? 'Checkout and sales links are unavailable right now. Use the backup contact options below.'
+      : 'Checkout and sales links are currently unavailable.'
+    : !checkoutUrl
+      ? 'Checkout link unavailable right now.'
+      : showBackupContactOptions
+        ? 'Sales link unavailable. Use the backup contact options below.'
+        : 'Sales link unavailable right now.';
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -392,7 +398,7 @@ export default function Home() {
                 </p>
               </div>
               <ActionLink
-                href={purchaseHref}
+                href={checkoutUrl}
                 className="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-200"
                 fallbackClassName="inline-flex items-center justify-center rounded-full bg-slate-800 px-5 py-3 text-sm font-semibold text-slate-300"
               >
@@ -409,12 +415,12 @@ export default function Home() {
                 <div className="md:col-span-3">
                   <p className="text-sm text-slate-400">{fallbackMessage}</p>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm text-slate-300">
-                    {activeContact.salesEmail && activeContact.salesMailto ? (
+                    {showBackupContactOptions && activeContact.salesEmail && activeContact.salesMailto ? (
                       <a className="underline decoration-white/20 underline-offset-4" href={activeContact.salesMailto}>
                         Email sales
                       </a>
                     ) : null}
-                    {activeContact.salesPhone && activeContact.salesPhoneHref ? (
+                    {showBackupContactOptions && activeContact.salesPhone && activeContact.salesPhoneHref ? (
                       <a className="underline decoration-white/20 underline-offset-4" href={activeContact.salesPhoneHref}>
                         Call {activeContact.salesPhone}
                       </a>
