@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { timingSafeEqual } from 'crypto';
+import { CLIENT_PORTAL_COOKIE, buildPortalToken } from '@/lib/client-portal-session';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const CLIENT_PORTAL_COOKIE = 'thinkeasy_client_portal';
+const COOKIE_TTL_SECONDS = 60 * 60 * 8; // 8 hours
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,17 +21,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Portal is not configured.' }, { status: 503 });
     }
 
-    if (code !== expected) {
-      return NextResponse.json({ success: false, error: 'Invalid access code. Please try again.' }, { status: 401 });
+    // Timing-safe comparison to resist timing attacks
+    const codeBytes = Buffer.from(code);
+    const expectedBytes = Buffer.from(expected);
+    const codesMatch =
+      codeBytes.length === expectedBytes.length && timingSafeEqual(codeBytes, expectedBytes);
+
+    if (!codesMatch) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid access code. Please try again.' },
+        { status: 401 }
+      );
     }
 
+    const token = buildPortalToken();
     const response = NextResponse.json({ success: true });
-    response.cookies.set(CLIENT_PORTAL_COOKIE, '1', {
+    response.cookies.set(CLIENT_PORTAL_COOKIE, token, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
       path: '/client-portal',
-      maxAge: 60 * 60 * 8, // 8 hours
+      maxAge: COOKIE_TTL_SECONDS,
     });
     return response;
   } catch {

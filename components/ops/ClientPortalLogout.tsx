@@ -9,8 +9,12 @@ export default function ClientPortalLogout() {
 
   async function handleLogout() {
     setLoading(true);
-    await fetch('/api/client-portal/access', { method: 'DELETE' });
-    router.refresh();
+    try {
+      await fetch('/api/client-portal/access', { method: 'DELETE' });
+      router.refresh();
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

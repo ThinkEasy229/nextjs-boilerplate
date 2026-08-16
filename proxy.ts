@@ -10,7 +10,6 @@ const PUBLIC_PATHS = new Set([
   '/design-studio',
   '/client-onboard',
   '/client-onboard/register',
-  '/client-portal',
 ]);
 
 function getAllowedRoles(pathname: string): readonly SessionRole[] | null {
