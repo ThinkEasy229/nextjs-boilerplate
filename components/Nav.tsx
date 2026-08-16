@@ -5,13 +5,11 @@ import { usePathname } from 'next/navigation';
 import { SignInButton, SignUpButton, UserButton, useAuth } from '@clerk/nextjs';
 
 const links = [
-  { href: '/', label: 'Wrap Lab' },
-  { href: '/billboard-lab', label: 'Billboard Lab' },
   { href: '/driver-portal', label: 'Driver Portal' },
   { href: '/driver-onboard', label: 'Driver Onboard' },
   { href: '/hr-operations', label: 'HR Ops' },
   { href: '/design-studio', label: 'Design Studio' },
-  { href: '/client-onboard', label: 'Client Portal' },
+  { href: '/client-portal', label: 'Client Portal' },
 ];
 
 export default function Nav() {
